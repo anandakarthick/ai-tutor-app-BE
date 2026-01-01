@@ -1,5 +1,5 @@
 import { Router, Response, NextFunction } from 'express';
-import { AppDataSource } from '../config/database';
+import AppDataSource from '../config/database';
 import { Student } from '../entities/Student';
 import { StudentProgress } from '../entities/StudentProgress';
 import { DailyProgress } from '../entities/DailyProgress';

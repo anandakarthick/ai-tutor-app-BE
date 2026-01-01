@@ -1,5 +1,5 @@
 import { Router, Response, NextFunction } from 'express';
-import { AppDataSource } from '../config/database';
+import AppDataSource from '../config/database';
 import { StudyPlan, PlanStatus } from '../entities/StudyPlan';
 import { StudyPlanItem, ItemStatus } from '../entities/StudyPlanItem';
 import { authenticate, AuthRequest } from '../middlewares/auth';

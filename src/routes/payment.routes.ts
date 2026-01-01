@@ -1,7 +1,7 @@
 import { Router, Response, NextFunction } from 'express';
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
-import { AppDataSource } from '../config/database';
+import AppDataSource from '../config/database';
 import { Payment, PaymentStatus, PaymentGateway } from '../entities/Payment';
 import { authenticate, AuthRequest } from '../middlewares/auth';
 import { config } from '../config';

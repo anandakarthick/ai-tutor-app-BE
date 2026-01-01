@@ -1,13 +1,15 @@
 import { Router, Response, NextFunction } from 'express';
-import { AppDataSource } from '../config/database';
-import { Doubt, DoubtStatus, DoubtType } from '../entities/Doubt';
+import AppDataSource from '../config/database';
+import { Doubt, DoubtStatus } from '../entities/Doubt';
+import { Student } from '../entities/Student';
 import { authenticate, AuthRequest } from '../middlewares/auth';
+import aiService from '../services/ai.service';
 
 const router = Router();
 
 /**
  * @route   POST /api/v1/doubts
- * @desc    Submit a doubt
+ * @desc    Create a new doubt
  * @access  Private
  */
 router.post('/', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -15,11 +17,24 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response, next: Nex
     const { studentId, topicId, question, doubtType = 'text', imageUrl, voiceUrl } = req.body;
 
     const doubtRepository = AppDataSource.getRepository(Doubt);
+    const studentRepository = AppDataSource.getRepository(Student);
+
+    // Get student info for AI context
+    const student = await studentRepository.findOne({
+      where: { id: studentId },
+      relations: ['class', 'board'],
+    });
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student not found' });
+    }
+
+    // Create doubt
     const doubt = doubtRepository.create({
       studentId,
       topicId,
       question,
-      doubtType: doubtType as DoubtType,
+      doubtType,
       imageUrl,
       voiceUrl,
       status: DoubtStatus.PENDING,
@@ -27,7 +42,23 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response, next: Nex
 
     await doubtRepository.save(doubt);
 
-    // TODO: Send to AI for answer
+    // Get AI answer
+    try {
+      const aiAnswer = await aiService.resolveDoubt({
+        studentName: student.studentName,
+        grade: student.class?.displayName || 'Student',
+        subject: 'General', // Would come from topic relation
+        topic: topicId,
+        question,
+      });
+
+      doubt.aiAnswer = aiAnswer;
+      doubt.status = DoubtStatus.AI_ANSWERED;
+      await doubtRepository.save(doubt);
+    } catch (aiError) {
+      // If AI fails, doubt remains pending
+      console.error('AI doubt resolution failed:', aiError);
+    }
 
     res.status(201).json({ success: true, data: doubt });
   } catch (error) {
@@ -37,28 +68,38 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response, next: Nex
 
 /**
  * @route   GET /api/v1/doubts
- * @desc    Get student's doubts
+ * @desc    Get doubts for a student
  * @access  Private
  */
 router.get('/', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { studentId, status, topicId } = req.query;
+    const { studentId, topicId, status, page = 1, limit = 20 } = req.query;
 
     const doubtRepository = AppDataSource.getRepository(Doubt);
-    const query: any = {};
     
+    const query: any = {};
     if (studentId) query.studentId = studentId;
-    if (status) query.status = status;
     if (topicId) query.topicId = topicId;
+    if (status) query.status = status;
 
-    const doubts = await doubtRepository.find({
+    const [doubts, total] = await doubtRepository.findAndCount({
       where: query,
       relations: ['topic'],
       order: { createdAt: 'DESC' },
-      take: 50,
+      skip: (Number(page) - 1) * Number(limit),
+      take: Number(limit),
     });
 
-    res.json({ success: true, data: doubts });
+    res.json({
+      success: true,
+      data: doubts,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        pages: Math.ceil(total / Number(limit)),
+      },
+    });
   } catch (error) {
     next(error);
   }
@@ -71,10 +112,12 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response, next: Next
  */
 router.get('/:id', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    const { id } = req.params;
+
     const doubtRepository = AppDataSource.getRepository(Doubt);
     const doubt = await doubtRepository.findOne({
-      where: { id: req.params.id },
-      relations: ['topic'],
+      where: { id },
+      relations: ['topic', 'student'],
     });
 
     if (!doubt) {
@@ -94,10 +137,12 @@ router.get('/:id', authenticate, async (req: AuthRequest, res: Response, next: N
  */
 router.put('/:id/resolve', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    const { id } = req.params;
     const { rating, feedback } = req.body;
-    const doubtRepository = AppDataSource.getRepository(Doubt);
 
-    await doubtRepository.update(req.params.id, {
+    const doubtRepository = AppDataSource.getRepository(Doubt);
+    
+    await doubtRepository.update(id, {
       isResolved: true,
       status: DoubtStatus.RESOLVED,
       resolvedAt: new Date(),
@@ -105,7 +150,8 @@ router.put('/:id/resolve', authenticate, async (req: AuthRequest, res: Response,
       feedback,
     });
 
-    const doubt = await doubtRepository.findOne({ where: { id: req.params.id } });
+    const doubt = await doubtRepository.findOne({ where: { id } });
+
     res.json({ success: true, data: doubt });
   } catch (error) {
     next(error);

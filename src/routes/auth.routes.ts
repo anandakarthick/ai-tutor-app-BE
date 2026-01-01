@@ -3,7 +3,7 @@ import authService from '../services/auth.service';
 import { authenticate, AuthRequest } from '../middlewares/auth';
 import { AppError } from '../middlewares/errorHandler';
 import { OtpPurpose } from '../entities/Otp';
-import { AppDataSource } from '../config/database';
+import AppDataSource from '../config/database';
 import { User } from '../entities/User';
 import { Student } from '../entities/Student';
 import { fcmService } from '../services/notification.service';

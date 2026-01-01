@@ -1,7 +1,8 @@
 import { Router, Response, NextFunction } from 'express';
-import { AppDataSource } from '../config/database';
+import AppDataSource from '../config/database';
 import { Board } from '../entities/Board';
 import { Class } from '../entities/Class';
+import { authenticate, AuthRequest } from '../middlewares/auth';
 import { cacheService } from '../config/redis';
 
 const router = Router();
@@ -22,11 +23,11 @@ router.get('/', async (req, res: Response, next: NextFunction) => {
     const boardRepository = AppDataSource.getRepository(Board);
     const boards = await boardRepository.find({
       where: { isActive: true },
-      order: { displayOrder: 'ASC', name: 'ASC' },
+      order: { displayOrder: 'ASC' },
     });
 
-    // Cache for 24 hours
-    await cacheService.set('boards:all', boards, 86400);
+    // Cache for 1 hour
+    await cacheService.set('boards:all', boards, 3600);
 
     res.json({ success: true, data: boards });
   } catch (error) {
@@ -41,14 +42,25 @@ router.get('/', async (req, res: Response, next: NextFunction) => {
  */
 router.get('/:id', async (req, res: Response, next: NextFunction) => {
   try {
+    const { id } = req.params;
+
+    // Try cache first
+    const cached = await cacheService.get<Board>(`board:${id}`);
+    if (cached) {
+      return res.json({ success: true, data: cached, cached: true });
+    }
+
     const boardRepository = AppDataSource.getRepository(Board);
     const board = await boardRepository.findOne({
-      where: { id: req.params.id, isActive: true },
+      where: { id, isActive: true },
     });
 
     if (!board) {
       return res.status(404).json({ success: false, message: 'Board not found' });
     }
+
+    // Cache for 1 hour
+    await cacheService.set(`board:${id}`, board, 3600);
 
     res.json({ success: true, data: board });
   } catch (error) {
@@ -58,24 +70,27 @@ router.get('/:id', async (req, res: Response, next: NextFunction) => {
 
 /**
  * @route   GET /api/v1/boards/:id/classes
- * @desc    Get classes for a board
+ * @desc    Get classes by board
  * @access  Public
  */
 router.get('/:id/classes', async (req, res: Response, next: NextFunction) => {
   try {
-    const cacheKey = `boards:${req.params.id}:classes`;
-    const cached = await cacheService.get<Class[]>(cacheKey);
+    const { id } = req.params;
+
+    // Try cache first
+    const cached = await cacheService.get<Class[]>(`board:${id}:classes`);
     if (cached) {
       return res.json({ success: true, data: cached, cached: true });
     }
 
     const classRepository = AppDataSource.getRepository(Class);
     const classes = await classRepository.find({
-      where: { boardId: req.params.id, isActive: true },
+      where: { boardId: id, isActive: true },
       order: { displayOrder: 'ASC' },
     });
 
-    await cacheService.set(cacheKey, classes, 86400);
+    // Cache for 1 hour
+    await cacheService.set(`board:${id}:classes`, classes, 3600);
 
     res.json({ success: true, data: classes });
   } catch (error) {

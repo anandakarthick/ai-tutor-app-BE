@@ -1,14 +1,14 @@
 import { Router, Response, NextFunction } from 'express';
-import { AppDataSource } from '../config/database';
-import { Student, Gender, Medium, LearningStyle } from '../entities/Student';
+import AppDataSource from '../config/database';
+import { Student } from '../entities/Student';
+import { StudentProgress } from '../entities/StudentProgress';
 import { authenticate, AuthRequest } from '../middlewares/auth';
-import { AppError } from '../middlewares/errorHandler';
 
 const router = Router();
 
 /**
  * @route   POST /api/v1/students
- * @desc    Create student profile
+ * @desc    Create a new student profile
  * @access  Private
  */
 router.post('/', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -18,51 +18,28 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response, next: Nex
       dateOfBirth,
       gender,
       schoolName,
-      schoolAddress,
       boardId,
       classId,
       section,
-      rollNumber,
       medium,
-      academicYear,
-      previousPercentage,
-      learningStyle,
-      dailyStudyHours,
-      preferredStudyTime,
-      careerGoal,
-      targetExam,
     } = req.body;
 
     const studentRepository = AppDataSource.getRepository(Student);
-
     const student = studentRepository.create({
       userId: req.user!.userId,
       studentName,
       dateOfBirth,
       gender,
       schoolName,
-      schoolAddress,
       boardId,
       classId,
       section,
-      rollNumber,
-      medium: medium || Medium.ENGLISH,
-      academicYear,
-      previousPercentage,
-      learningStyle,
-      dailyStudyHours: dailyStudyHours || 2,
-      preferredStudyTime,
-      careerGoal,
-      targetExam,
+      medium,
     });
 
     await studentRepository.save(student);
 
-    res.status(201).json({
-      success: true,
-      message: 'Student profile created successfully',
-      data: student,
-    });
+    res.status(201).json({ success: true, data: student });
   } catch (error) {
     next(error);
   }
@@ -70,16 +47,15 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response, next: Nex
 
 /**
  * @route   GET /api/v1/students
- * @desc    Get all students for user
+ * @desc    Get all students for current user
  * @access  Private
  */
 router.get('/', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const studentRepository = AppDataSource.getRepository(Student);
     const students = await studentRepository.find({
-      where: { userId: req.user!.userId },
+      where: { userId: req.user!.userId, isActive: true },
       relations: ['board', 'class'],
-      order: { createdAt: 'DESC' },
     });
 
     res.json({ success: true, data: students });
@@ -95,14 +71,16 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response, next: Next
  */
 router.get('/:id', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    const { id } = req.params;
+
     const studentRepository = AppDataSource.getRepository(Student);
     const student = await studentRepository.findOne({
-      where: { id: req.params.id, userId: req.user!.userId },
+      where: { id, userId: req.user!.userId },
       relations: ['board', 'class'],
     });
 
     if (!student) {
-      throw new AppError('Student not found', 404, 'NOT_FOUND');
+      return res.status(404).json({ success: false, message: 'Student not found' });
     }
 
     res.json({ success: true, data: student });
@@ -113,25 +91,33 @@ router.get('/:id', authenticate, async (req: AuthRequest, res: Response, next: N
 
 /**
  * @route   PUT /api/v1/students/:id
- * @desc    Update student
+ * @desc    Update student profile
  * @access  Private
  */
 router.put('/:id', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    const { id } = req.params;
+    const updateData = req.body;
+
     const studentRepository = AppDataSource.getRepository(Student);
     
+    // Verify ownership
     const student = await studentRepository.findOne({
-      where: { id: req.params.id, userId: req.user!.userId },
+      where: { id, userId: req.user!.userId },
     });
 
     if (!student) {
-      throw new AppError('Student not found', 404, 'NOT_FOUND');
+      return res.status(404).json({ success: false, message: 'Student not found' });
     }
 
-    Object.assign(student, req.body);
-    await studentRepository.save(student);
+    await studentRepository.update(id, updateData);
 
-    res.json({ success: true, data: student });
+    const updatedStudent = await studentRepository.findOne({
+      where: { id },
+      relations: ['board', 'class'],
+    });
+
+    res.json({ success: true, data: updatedStudent });
   } catch (error) {
     next(error);
   }
@@ -139,29 +125,20 @@ router.put('/:id', authenticate, async (req: AuthRequest, res: Response, next: N
 
 /**
  * @route   GET /api/v1/students/:id/progress
- * @desc    Get student progress summary
+ * @desc    Get student's progress
  * @access  Private
  */
 router.get('/:id/progress', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const studentRepository = AppDataSource.getRepository(Student);
-    const student = await studentRepository.findOne({
-      where: { id: req.params.id, userId: req.user!.userId },
+    const { id } = req.params;
+
+    const progressRepository = AppDataSource.getRepository(StudentProgress);
+    const progress = await progressRepository.find({
+      where: { studentId: id },
+      relations: ['topic', 'topic.chapter'],
     });
 
-    if (!student) {
-      throw new AppError('Student not found', 404, 'NOT_FOUND');
-    }
-
-    res.json({
-      success: true,
-      data: {
-        xp: student.xp,
-        level: student.level,
-        streakDays: student.streakDays,
-        lastActivityDate: student.lastActivityDate,
-      },
-    });
+    res.json({ success: true, data: progress });
   } catch (error) {
     next(error);
   }

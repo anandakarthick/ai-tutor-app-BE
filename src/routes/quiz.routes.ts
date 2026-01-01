@@ -1,5 +1,5 @@
 import { Router, Response, NextFunction } from 'express';
-import { AppDataSource } from '../config/database';
+import AppDataSource from '../config/database';
 import { Quiz } from '../entities/Quiz';
 import { Question } from '../entities/Question';
 import { QuizAttempt, AttemptStatus } from '../entities/QuizAttempt';
@@ -10,7 +10,7 @@ const router = Router();
 
 /**
  * @route   GET /api/v1/quizzes
- * @desc    Get quizzes
+ * @desc    Get quizzes by topic
  * @access  Private
  */
 router.get('/', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -41,15 +41,29 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response, next: Next
  */
 router.get('/:id', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    const { id } = req.params;
+
     const quizRepository = AppDataSource.getRepository(Quiz);
     const quiz = await quizRepository.findOne({
-      where: { id: req.params.id },
+      where: { id, isActive: true },
       relations: ['questions'],
     });
 
     if (!quiz) {
       return res.status(404).json({ success: false, message: 'Quiz not found' });
     }
+
+    // Shuffle questions if enabled
+    if (quiz.shuffleQuestions && quiz.questions) {
+      quiz.questions = quiz.questions.sort(() => Math.random() - 0.5);
+    }
+
+    // Remove correct answers from response
+    quiz.questions = quiz.questions?.map(q => ({
+      ...q,
+      correctAnswer: undefined,
+      explanation: undefined,
+    })) as Question[];
 
     res.json({ success: true, data: quiz });
   } catch (error) {
@@ -64,10 +78,11 @@ router.get('/:id', authenticate, async (req: AuthRequest, res: Response, next: N
  */
 router.post('/:id/attempt', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    const { id } = req.params;
     const { studentId } = req.body;
 
     const quizRepository = AppDataSource.getRepository(Quiz);
-    const quiz = await quizRepository.findOne({ where: { id: req.params.id } });
+    const quiz = await quizRepository.findOne({ where: { id } });
 
     if (!quiz) {
       return res.status(404).json({ success: false, message: 'Quiz not found' });
@@ -76,7 +91,7 @@ router.post('/:id/attempt', authenticate, async (req: AuthRequest, res: Response
     const attemptRepository = AppDataSource.getRepository(QuizAttempt);
     const attempt = attemptRepository.create({
       studentId,
-      quizId: req.params.id,
+      quizId: id,
       startedAt: new Date(),
       status: AttemptStatus.IN_PROGRESS,
       totalQuestions: quiz.totalQuestions,
@@ -98,7 +113,8 @@ router.post('/:id/attempt', authenticate, async (req: AuthRequest, res: Response
  */
 router.post('/attempts/:attemptId/answer', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { questionId, studentAnswer, timeTaken } = req.body;
+    const { attemptId } = req.params;
+    const { questionId, studentAnswer, timeTaken = 0 } = req.body;
 
     const questionRepository = AppDataSource.getRepository(Question);
     const question = await questionRepository.findOne({ where: { id: questionId } });
@@ -112,17 +128,17 @@ router.post('/attempts/:attemptId/answer', authenticate, async (req: AuthRequest
 
     const responseRepository = AppDataSource.getRepository(AnswerResponse);
     const response = responseRepository.create({
-      attemptId: req.params.attemptId,
+      attemptId,
       questionId,
       studentAnswer,
       isCorrect,
       marksObtained,
-      timeTakenSeconds: timeTaken || 0,
+      timeTakenSeconds: timeTaken,
     });
 
     await responseRepository.save(response);
 
-    res.status(201).json({ success: true, data: { ...response, explanation: question.explanation } });
+    res.json({ success: true, data: response });
   } catch (error) {
     next(error);
   }
@@ -135,32 +151,53 @@ router.post('/attempts/:attemptId/answer', authenticate, async (req: AuthRequest
  */
 router.put('/attempts/:attemptId/submit', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    const { attemptId } = req.params;
+
     const attemptRepository = AppDataSource.getRepository(QuizAttempt);
     const responseRepository = AppDataSource.getRepository(AnswerResponse);
+    const quizRepository = AppDataSource.getRepository(Quiz);
 
-    const attempt = await attemptRepository.findOne({ where: { id: req.params.attemptId } });
+    const attempt = await attemptRepository.findOne({
+      where: { id: attemptId },
+      relations: ['quiz'],
+    });
+
     if (!attempt) {
       return res.status(404).json({ success: false, message: 'Attempt not found' });
     }
 
-    const responses = await responseRepository.find({ where: { attemptId: req.params.attemptId } });
-
+    // Calculate results
+    const responses = await responseRepository.find({ where: { attemptId } });
+    
     const correctAnswers = responses.filter(r => r.isCorrect).length;
     const wrongAnswers = responses.filter(r => !r.isCorrect && !r.isSkipped).length;
-    const marksObtained = responses.reduce((sum, r) => sum + r.marksObtained, 0);
+    const marksObtained = responses.reduce((sum, r) => sum + Number(r.marksObtained), 0);
+    const totalTimeTaken = responses.reduce((sum, r) => sum + r.timeTakenSeconds, 0);
+    const percentage = (marksObtained / Number(attempt.totalMarks)) * 100;
+    const isPassed = percentage >= Number(attempt.quiz?.passingPercentage || 40);
 
-    attempt.status = AttemptStatus.SUBMITTED;
-    attempt.submittedAt = new Date();
-    attempt.attemptedQuestions = responses.length;
-    attempt.correctAnswers = correctAnswers;
-    attempt.wrongAnswers = wrongAnswers;
-    attempt.marksObtained = marksObtained;
-    attempt.percentage = (marksObtained / attempt.totalMarks) * 100;
-    attempt.timeTakenSeconds = Math.floor((attempt.submittedAt.getTime() - attempt.startedAt.getTime()) / 1000);
+    // Calculate XP earned
+    const xpEarned = Math.floor(correctAnswers * 10 + (isPassed ? 50 : 0));
 
-    await attemptRepository.save(attempt);
+    await attemptRepository.update(attemptId, {
+      status: AttemptStatus.SUBMITTED,
+      submittedAt: new Date(),
+      attemptedQuestions: responses.length,
+      correctAnswers,
+      wrongAnswers,
+      marksObtained,
+      percentage,
+      timeTakenSeconds: totalTimeTaken,
+      isPassed,
+      xpEarned,
+    });
 
-    res.json({ success: true, data: attempt });
+    const updatedAttempt = await attemptRepository.findOne({
+      where: { id: attemptId },
+      relations: ['responses', 'quiz'],
+    });
+
+    res.json({ success: true, data: updatedAttempt });
   } catch (error) {
     next(error);
   }

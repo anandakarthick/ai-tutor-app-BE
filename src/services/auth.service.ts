@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { Repository } from 'typeorm';
-import { AppDataSource } from '../config/database';
+import AppDataSource from '../config/database';
 import { User, UserRole, AuthProvider } from '../entities/User';
 import { Otp, OtpPurpose } from '../entities/Otp';
 import { config } from '../config';

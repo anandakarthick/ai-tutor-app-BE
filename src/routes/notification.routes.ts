@@ -1,9 +1,9 @@
 import { Router, Response, NextFunction } from 'express';
-import { AppDataSource } from '../config/database';
+import AppDataSource from '../config/database';
 import { Notification, NotificationType } from '../entities/Notification';
 import { User } from '../entities/User';
 import { authenticate, AuthRequest, authorize } from '../middlewares/auth';
-import { UserRole } from '../entities/User';
+import { UserRole } from '../entities/enums';
 import notificationService, { fcmService } from '../services/notification.service';
 import { AppError } from '../middlewares/errorHandler';
 

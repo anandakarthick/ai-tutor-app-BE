@@ -1,5 +1,5 @@
 import { Router, Response, NextFunction } from 'express';
-import { AppDataSource } from '../config/database';
+import AppDataSource from '../config/database';
 import { SubscriptionPlan } from '../entities/SubscriptionPlan';
 import { UserSubscription, SubscriptionStatus } from '../entities/UserSubscription';
 import { Coupon, DiscountType } from '../entities/Coupon';

@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { AppDataSource, initializeDatabase } from '../../config/database';
+import AppDataSource from '../../config/datasource';
 import { Board } from '../../entities/Board';
 import { Class } from '../../entities/Class';
 import { SubscriptionPlan } from '../../entities/SubscriptionPlan';
@@ -8,7 +8,10 @@ import { logger } from '../../utils/logger';
 
 async function seed() {
   try {
-    await initializeDatabase();
+    // Initialize database
+    if (!AppDataSource.isInitialized) {
+      await AppDataSource.initialize();
+    }
     logger.info('🌱 Starting database seeding...');
 
     // Seed Boards
@@ -123,7 +126,7 @@ async function seed() {
         originalPrice: 3999,
         durationMonths: 1,
         maxStudents: 3,
-        aiMinutesPerDay: 9999, // Unlimited
+        aiMinutesPerDay: 9999,
         features: ['All Subjects', 'Unlimited AI', 'All features', 'Live sessions', 'Personal mentor', '24/7 support'],
         doubtTypes: ['text', 'voice', 'image'],
         hasLiveSessions: true,

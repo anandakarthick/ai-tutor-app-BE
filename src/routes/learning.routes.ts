@@ -1,9 +1,10 @@
 import { Router, Response, NextFunction } from 'express';
-import { AppDataSource } from '../config/database';
-import { LearningSession, SessionType, SessionStatus } from '../entities/LearningSession';
+import AppDataSource from '../config/database';
+import { LearningSession, SessionStatus } from '../entities/LearningSession';
 import { ChatMessage, SenderType, MessageType } from '../entities/ChatMessage';
 import { StudentProgress, MasteryLevel } from '../entities/StudentProgress';
 import { authenticate, AuthRequest } from '../middlewares/auth';
+import aiService from '../services/ai.service';
 
 const router = Router();
 
@@ -20,7 +21,7 @@ router.post('/session', authenticate, async (req: AuthRequest, res: Response, ne
     const session = sessionRepository.create({
       studentId,
       topicId,
-      sessionType: sessionType as SessionType,
+      sessionType,
       status: SessionStatus.ACTIVE,
       startedAt: new Date(),
     });
@@ -40,20 +41,44 @@ router.post('/session', authenticate, async (req: AuthRequest, res: Response, ne
  */
 router.put('/session/:id/end', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    const { id } = req.params;
+    const { xpEarned = 0 } = req.body;
+
     const sessionRepository = AppDataSource.getRepository(LearningSession);
-    const session = await sessionRepository.findOne({ where: { id: req.params.id } });
+    const session = await sessionRepository.findOne({ where: { id } });
 
     if (!session) {
       return res.status(404).json({ success: false, message: 'Session not found' });
     }
 
-    session.status = SessionStatus.COMPLETED;
-    session.endedAt = new Date();
-    session.durationSeconds = Math.floor((session.endedAt.getTime() - session.startedAt!.getTime()) / 1000);
+    const endedAt = new Date();
+    const durationSeconds = Math.floor((endedAt.getTime() - session.startedAt!.getTime()) / 1000);
 
-    await sessionRepository.save(session);
+    await sessionRepository.update(id, {
+      status: SessionStatus.COMPLETED,
+      endedAt,
+      durationSeconds,
+      xpEarned,
+    });
 
-    res.json({ success: true, data: session });
+    // Update student progress
+    const progressRepository = AppDataSource.getRepository(StudentProgress);
+    let progress = await progressRepository.findOne({
+      where: { studentId: session.studentId, topicId: session.topicId },
+    });
+
+    if (!progress) {
+      progress = progressRepository.create({
+        studentId: session.studentId,
+        topicId: session.topicId,
+      });
+    }
+
+    progress.totalTimeSpentMinutes += Math.ceil(durationSeconds / 60);
+    progress.lastAccessedAt = new Date();
+    await progressRepository.save(progress);
+
+    res.json({ success: true, message: 'Session ended', data: { durationSeconds } });
   } catch (error) {
     next(error);
   }
@@ -66,21 +91,61 @@ router.put('/session/:id/end', authenticate, async (req: AuthRequest, res: Respo
  */
 router.post('/session/:id/message', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    const { id } = req.params;
     const { content, messageType = 'text' } = req.body;
 
+    const sessionRepository = AppDataSource.getRepository(LearningSession);
+    const session = await sessionRepository.findOne({
+      where: { id },
+      relations: ['topic', 'topic.chapter', 'topic.chapter.book', 'topic.chapter.book.subject', 'student'],
+    });
+
+    if (!session) {
+      return res.status(404).json({ success: false, message: 'Session not found' });
+    }
+
     const messageRepository = AppDataSource.getRepository(ChatMessage);
-    const message = messageRepository.create({
-      sessionId: req.params.id,
+
+    // Save user message
+    const userMessage = messageRepository.create({
+      sessionId: id,
       senderType: SenderType.STUDENT,
       messageType: messageType as MessageType,
       content,
     });
+    await messageRepository.save(userMessage);
 
-    await messageRepository.save(message);
+    // Get AI response
+    const aiResponse = await aiService.conductTeachingSession({
+      studentName: session.student.studentName,
+      grade: session.topic?.chapter?.book?.subject?.class?.displayName || 'Student',
+      subject: session.topic?.chapter?.book?.subject?.displayName || 'Subject',
+      topic: session.topic?.topicTitle || 'Topic',
+      content: content,
+      previousContext: '', // Could include previous messages here
+    });
 
-    // TODO: Add AI response here using Claude API
+    // Save AI message
+    const aiMessage = messageRepository.create({
+      sessionId: id,
+      senderType: SenderType.AI,
+      messageType: MessageType.EXPLANATION,
+      content: aiResponse,
+    });
+    await messageRepository.save(aiMessage);
 
-    res.status(201).json({ success: true, data: message });
+    // Update session stats
+    await sessionRepository.update(id, {
+      aiInteractions: () => 'ai_interactions + 1',
+    });
+
+    res.json({
+      success: true,
+      data: {
+        userMessage,
+        aiMessage,
+      },
+    });
   } catch (error) {
     next(error);
   }
@@ -93,9 +158,11 @@ router.post('/session/:id/message', authenticate, async (req: AuthRequest, res: 
  */
 router.get('/session/:id/messages', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    const { id } = req.params;
+
     const messageRepository = AppDataSource.getRepository(ChatMessage);
     const messages = await messageRepository.find({
-      where: { sessionId: req.params.id },
+      where: { sessionId: id },
       order: { createdAt: 'ASC' },
     });
 
@@ -107,33 +174,28 @@ router.get('/session/:id/messages', authenticate, async (req: AuthRequest, res: 
 
 /**
  * @route   PUT /api/v1/learning/progress
- * @desc    Update learning progress
+ * @desc    Update topic progress
  * @access  Private
  */
 router.put('/progress', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { studentId, topicId, progressPercentage, timeSpent } = req.body;
+    const { studentId, topicId, progressPercentage, masteryLevel } = req.body;
 
     const progressRepository = AppDataSource.getRepository(StudentProgress);
-    let progress = await progressRepository.findOne({ where: { studentId, topicId } });
+    let progress = await progressRepository.findOne({
+      where: { studentId, topicId },
+    });
 
     if (!progress) {
       progress = progressRepository.create({ studentId, topicId });
     }
 
     progress.progressPercentage = progressPercentage;
-    progress.totalTimeSpentMinutes += timeSpent || 0;
-    progress.lastAccessedAt = new Date();
-
-    // Update mastery level based on progress
-    if (progressPercentage >= 90) {
-      progress.masteryLevel = MasteryLevel.MASTERED;
-    } else if (progressPercentage >= 70) {
-      progress.masteryLevel = MasteryLevel.PROFICIENT;
-    } else if (progressPercentage >= 50) {
-      progress.masteryLevel = MasteryLevel.PRACTICING;
-    } else if (progressPercentage >= 20) {
-      progress.masteryLevel = MasteryLevel.LEARNING;
+    if (masteryLevel) {
+      progress.masteryLevel = masteryLevel as MasteryLevel;
+    }
+    if (progressPercentage === 100 && !progress.completedAt) {
+      progress.completedAt = new Date();
     }
 
     await progressRepository.save(progress);

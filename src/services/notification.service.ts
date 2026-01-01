@@ -1,7 +1,7 @@
 import admin from 'firebase-admin';
 import { config } from '../config';
 import { logger } from '../utils/logger';
-import { AppDataSource } from '../config/database';
+import AppDataSource from '../config/database';
 import { Notification, NotificationType, NotificationPriority } from '../entities/Notification';
 import { User } from '../entities/User';
 
@@ -64,7 +64,7 @@ export interface FCMDataPayload {
  */
 export interface FCMAndroidConfig {
   priority?: 'high' | 'normal';
-  ttl?: string; // e.g., "3600s"
+  ttl?: string;
   collapseKey?: string;
   channelId?: string;
   icon?: string;
@@ -123,12 +123,12 @@ export class FCMService {
   ): admin.messaging.AndroidConfig {
     return {
       priority: androidConfig?.priority || 'high',
-      ttl: androidConfig?.ttl ? parseInt(androidConfig.ttl) * 1000 : 3600000, // Default 1 hour
+      ttl: androidConfig?.ttl ? parseInt(androidConfig.ttl) * 1000 : 3600000,
       collapseKey: androidConfig?.collapseKey,
       notification: {
         channelId: androidConfig?.channelId || 'ai_tutor_default',
         icon: androidConfig?.icon || 'ic_notification',
-        color: androidConfig?.color || '#F97316', // Orange theme color
+        color: androidConfig?.color || '#F97316',
         sound: androidConfig?.sound || 'default',
         clickAction: androidConfig?.clickAction || 'FLUTTER_NOTIFICATION_CLICK',
         title: notification.title,
@@ -150,7 +150,7 @@ export class FCMService {
   ): admin.messaging.ApnsConfig {
     return {
       headers: {
-        'apns-priority': '10', // High priority
+        'apns-priority': '10',
         'apns-push-type': 'alert',
       },
       payload: {
@@ -186,7 +186,6 @@ export class FCMService {
     }
 
     try {
-      // Build FCM V1 API message
       const message: admin.messaging.Message = {
         token: fcmToken,
         notification: {
@@ -209,7 +208,6 @@ export class FCMService {
         },
       };
 
-      // Send using FCM V1 API
       const response = await this.messaging.send(message);
       
       logger.info(`✅ FCM notification sent successfully. Message ID: ${response}`);
@@ -217,7 +215,6 @@ export class FCMService {
     } catch (error: any) {
       logger.error('❌ FCM send error:', error);
 
-      // Handle specific FCM errors
       if (error.code === 'messaging/registration-token-not-registered') {
         return { success: false, error: 'Token not registered - device may have uninstalled the app' };
       }
@@ -249,7 +246,6 @@ export class FCMService {
     }
 
     try {
-      // Build multicast message for FCM V1 API
       const message: admin.messaging.MulticastMessage = {
         tokens: fcmTokens,
         notification: {
@@ -262,19 +258,9 @@ export class FCMService {
         apns: this.buildApnsConfig(options.notification, options.apns),
       };
 
-      // Send using FCM V1 API multicast
       const response = await this.messaging.sendEachForMulticast(message);
 
       logger.info(`📤 FCM multicast: ${response.successCount} success, ${response.failureCount} failed`);
-
-      // Log failed tokens for cleanup
-      const failedTokens: string[] = [];
-      response.responses.forEach((resp, idx) => {
-        if (!resp.success) {
-          failedTokens.push(fcmTokens[idx]);
-          logger.warn(`Failed token: ${fcmTokens[idx].substring(0, 20)}... Error: ${resp.error?.message}`);
-        }
-      });
 
       return {
         successCount: response.successCount,
@@ -300,7 +286,6 @@ export class FCMService {
     }
 
     try {
-      // Build topic message for FCM V1 API
       const message: admin.messaging.Message = {
         topic: topic,
         notification: {
@@ -319,41 +304,6 @@ export class FCMService {
       return { success: true, messageId: response };
     } catch (error: any) {
       logger.error(`❌ FCM topic send error for '${topic}':`, error);
-      return { success: false, error: error.message };
-    }
-  }
-
-  /**
-   * Send notification to a condition (multiple topics) using FCM V1 API
-   * Example condition: "'topic1' in topics && 'topic2' in topics"
-   */
-  async sendToCondition(
-    condition: string,
-    options: FCMMessageOptions
-  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
-    if (!this.messaging) {
-      return { success: false, error: 'Firebase not initialized' };
-    }
-
-    try {
-      const message: admin.messaging.Message = {
-        condition: condition,
-        notification: {
-          title: options.notification.title,
-          body: options.notification.body,
-          imageUrl: options.notification.imageUrl,
-        },
-        data: options.data,
-        android: this.buildAndroidConfig(options.notification, options.android),
-        apns: this.buildApnsConfig(options.notification, options.apns),
-      };
-
-      const response = await this.messaging.send(message);
-      
-      logger.info(`✅ FCM condition notification sent. Message ID: ${response}`);
-      return { success: true, messageId: response };
-    } catch (error: any) {
-      logger.error('❌ FCM condition send error:', error);
       return { success: false, error: error.message };
     }
   }
@@ -412,7 +362,6 @@ export const fcmService = new FCMService();
 
 /**
  * Complete Notification Service
- * Handles both database storage and FCM push notifications
  */
 export class NotificationService {
   private fcm: FCMService;
@@ -437,7 +386,6 @@ export class NotificationService {
   }): Promise<Notification> {
     const notificationRepository = AppDataSource.getRepository(Notification);
 
-    // Create notification record
     const notification = notificationRepository.create({
       userId: data.userId,
       notificationType: data.type,
@@ -451,7 +399,6 @@ export class NotificationService {
 
     await notificationRepository.save(notification);
 
-    // Send push notification if requested
     if (data.sendPush !== false) {
       const userRepository = AppDataSource.getRepository(User);
       const user = await userRepository.findOne({
@@ -491,9 +438,6 @@ export class NotificationService {
     return notification;
   }
 
-  /**
-   * Get Android notification channel ID based on notification type
-   */
   private getChannelIdForType(type: NotificationType): string {
     const channelMap: Record<NotificationType, string> = {
       [NotificationType.SYSTEM]: 'ai_tutor_system',
@@ -508,9 +452,6 @@ export class NotificationService {
     return channelMap[type] || 'ai_tutor_default';
   }
 
-  /**
-   * Send study reminder
-   */
   async sendStudyReminder(userId: string, studentName: string): Promise<void> {
     await this.createAndSend({
       userId,
@@ -521,9 +462,6 @@ export class NotificationService {
     });
   }
 
-  /**
-   * Send streak reminder
-   */
   async sendStreakReminder(userId: string, streakDays: number): Promise<void> {
     await this.createAndSend({
       userId,
@@ -535,9 +473,6 @@ export class NotificationService {
     });
   }
 
-  /**
-   * Send achievement notification
-   */
   async sendAchievementNotification(
     userId: string,
     achievementName: string,
@@ -553,9 +488,6 @@ export class NotificationService {
     });
   }
 
-  /**
-   * Send quiz result notification
-   */
   async sendQuizResultNotification(
     userId: string,
     quizTitle: string,
@@ -571,9 +503,6 @@ export class NotificationService {
     });
   }
 
-  /**
-   * Send subscription notification
-   */
   async sendSubscriptionNotification(
     userId: string,
     type: 'activated' | 'expiring' | 'expired',
@@ -596,60 +525,12 @@ export class NotificationService {
     });
   }
 
-  /**
-   * Send topic notification to all subscribed users
-   */
-  async sendTopicNotification(
-    topic: string,
-    title: string,
-    message: string,
-    data?: Record<string, string>
-  ): Promise<{ success: boolean; messageId?: string }> {
-    return this.fcm.sendToTopic(topic, {
-      notification: { title, body: message },
-      data,
-    });
-  }
-
-  /**
-   * Send to all users (broadcast)
-   */
   async sendBroadcast(
     title: string,
     message: string,
     data?: Record<string, string>
   ): Promise<{ success: boolean; messageId?: string }> {
     return this.fcm.sendToTopic('all_users', {
-      notification: { title, body: message },
-      data,
-    });
-  }
-
-  /**
-   * Send to specific board users
-   */
-  async sendToBoardUsers(
-    boardName: string,
-    title: string,
-    message: string,
-    data?: Record<string, string>
-  ): Promise<{ success: boolean; messageId?: string }> {
-    return this.fcm.sendToTopic(`board_${boardName.toLowerCase()}`, {
-      notification: { title, body: message },
-      data,
-    });
-  }
-
-  /**
-   * Send to specific class users
-   */
-  async sendToClassUsers(
-    className: string,
-    title: string,
-    message: string,
-    data?: Record<string, string>
-  ): Promise<{ success: boolean; messageId?: string }> {
-    return this.fcm.sendToTopic(`class_${className}`, {
       notification: { title, body: message },
       data,
     });

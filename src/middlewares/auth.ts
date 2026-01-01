@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { config } from '../config';
 import { AppError } from './errorHandler';
-import { AppDataSource } from '../config/database';
+import AppDataSource from '../config/database';
 import { User, UserRole } from '../entities/User';
 import { redisClient } from '../config/redis';
 
