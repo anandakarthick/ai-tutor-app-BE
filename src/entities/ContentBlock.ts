@@ -1,26 +1,11 @@
-import { Entity, Column, ManyToOne, JoinColumn, Index } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from './BaseEntity';
 import { Topic } from './Topic';
+import { BlockType } from './enums';
 
-export enum BlockType {
-  TEXT = 'text',
-  HEADING = 'heading',
-  DEFINITION = 'definition',
-  EXAMPLE = 'example',
-  FORMULA = 'formula',
-  IMAGE = 'image',
-  VIDEO = 'video',
-  AUDIO = 'audio',
-  DIAGRAM = 'diagram',
-  TABLE = 'table',
-  QUIZ = 'quiz',
-  NOTE = 'note',
-  TIP = 'tip',
-  WARNING = 'warning',
-}
+export { BlockType };
 
 @Entity('content_blocks')
-@Index(['topicId', 'sequenceOrder'])
 export class ContentBlock extends BaseEntity {
   @ManyToOne(() => Topic, (topic) => topic.contentBlocks)
   @JoinColumn({ name: 'topic_id' })
@@ -43,7 +28,7 @@ export class ContentBlock extends BaseEntity {
   @Column({ nullable: true, type: 'text', name: 'ai_explanation' })
   aiExplanation?: string;
 
-  @Column({ nullable: true, name: 'media_url' })
+  @Column({ nullable: true, type: 'text', name: 'media_url' })
   mediaUrl?: string;
 
   @Column({ name: 'sequence_order' })

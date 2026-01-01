@@ -3,6 +3,10 @@ import authService from '../services/auth.service';
 import { authenticate, AuthRequest } from '../middlewares/auth';
 import { AppError } from '../middlewares/errorHandler';
 import { OtpPurpose } from '../entities/Otp';
+import { AppDataSource } from '../config/database';
+import { User } from '../entities/User';
+import { Student } from '../entities/Student';
+import { fcmService } from '../services/notification.service';
 
 const router = Router();
 
@@ -190,7 +194,7 @@ router.post('/logout', authenticate, async (req: AuthRequest, res: Response, nex
 
 /**
  * @route   POST /api/v1/auth/fcm-token
- * @desc    Update FCM token for push notifications
+ * @desc    Update FCM token and subscribe to topics
  * @access  Private
  */
 router.post('/fcm-token', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -201,11 +205,76 @@ router.post('/fcm-token', authenticate, async (req: AuthRequest, res: Response, 
       throw new AppError('FCM token is required', 400, 'FCM_TOKEN_REQUIRED');
     }
 
+    // Update FCM token in database
     await authService.updateFcmToken(req.user!.userId, fcmToken);
+
+    // Subscribe to default topics
+    const defaultTopics = ['all_users'];
+    
+    // Get user's student profile to subscribe to relevant topics
+    const studentRepository = AppDataSource.getRepository(Student);
+    const students = await studentRepository.find({
+      where: { userId: req.user!.userId },
+      relations: ['board', 'class'],
+    });
+
+    // Add student-specific topics
+    for (const student of students) {
+      if (student.board) {
+        defaultTopics.push(`board_${student.board.name.toLowerCase()}`);
+      }
+      if (student.class) {
+        defaultTopics.push(`class_${student.class.className}`);
+      }
+      defaultTopics.push(`student_${student.id}`);
+    }
+
+    // Subscribe to all topics
+    const subscriptionResults: { topic: string; success: boolean }[] = [];
+    for (const topic of defaultTopics) {
+      const result = await fcmService.subscribeToTopic([fcmToken], topic);
+      subscriptionResults.push({
+        topic,
+        success: result.successCount > 0,
+      });
+    }
 
     res.status(200).json({
       success: true,
-      message: 'FCM token updated successfully',
+      message: 'FCM token updated and subscribed to topics',
+      data: {
+        subscribedTopics: subscriptionResults.filter(r => r.success).map(r => r.topic),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * @route   DELETE /api/v1/auth/fcm-token
+ * @desc    Remove FCM token (unregister device)
+ * @access  Private
+ */
+router.delete('/fcm-token', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const userRepository = AppDataSource.getRepository(User);
+    const user = await userRepository.findOne({
+      where: { id: req.user!.userId },
+      select: ['id', 'fcmToken'],
+    });
+
+    if (user?.fcmToken) {
+      // Unsubscribe from all_users topic
+      await fcmService.unsubscribeFromTopic([user.fcmToken], 'all_users');
+      
+      // Clear FCM token
+      await userRepository.update(req.user!.userId, { fcmToken: undefined });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'FCM token removed successfully',
     });
   } catch (error) {
     next(error);

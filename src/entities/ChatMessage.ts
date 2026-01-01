@@ -1,27 +1,11 @@
-import { Entity, Column, ManyToOne, JoinColumn, Index } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from './BaseEntity';
 import { LearningSession } from './LearningSession';
+import { SenderType, MessageType } from './enums';
 
-export enum SenderType {
-  STUDENT = 'student',
-  AI = 'ai',
-  SYSTEM = 'system',
-}
-
-export enum MessageType {
-  TEXT = 'text',
-  VOICE = 'voice',
-  IMAGE = 'image',
-  AUDIO = 'audio',
-  EXPLANATION = 'explanation',
-  QUESTION = 'question',
-  ANSWER = 'answer',
-  HINT = 'hint',
-  SUMMARY = 'summary',
-}
+export { SenderType, MessageType };
 
 @Entity('chat_messages')
-@Index(['sessionId', 'createdAt'])
 export class ChatMessage extends BaseEntity {
   @ManyToOne(() => LearningSession, (session) => session.messages)
   @JoinColumn({ name: 'session_id' })
@@ -48,10 +32,10 @@ export class ChatMessage extends BaseEntity {
   @Column({ type: 'text' })
   content: string;
 
-  @Column({ nullable: true, name: 'media_url' })
+  @Column({ nullable: true, type: 'text', name: 'media_url' })
   mediaUrl?: string;
 
-  @Column({ nullable: true, name: 'voice_transcript', type: 'text' })
+  @Column({ nullable: true, type: 'text', name: 'voice_transcript' })
   voiceTranscript?: string;
 
   @Column({ nullable: true, type: 'jsonb' })

@@ -1,21 +1,9 @@
-import { Entity, Column, OneToMany, Index } from 'typeorm';
+import { Entity, Column, OneToMany, Index, BeforeInsert, BeforeUpdate } from 'typeorm';
 import { BaseEntity } from './BaseEntity';
 import { Student } from './Student';
-import { UserSubscription } from './UserSubscription';
-import { Payment } from './Payment';
-import { Notification } from './Notification';
+import { UserRole, AuthProvider } from './enums';
 
-export enum UserRole {
-  PARENT = 'parent',
-  STUDENT = 'student',
-  ADMIN = 'admin',
-}
-
-export enum AuthProvider {
-  LOCAL = 'local',
-  GOOGLE = 'google',
-  FACEBOOK = 'facebook',
-}
+export { UserRole, AuthProvider };
 
 @Entity('users')
 export class User extends BaseEntity {
@@ -23,14 +11,14 @@ export class User extends BaseEntity {
   fullName: string;
 
   @Index({ unique: true })
-  @Column({ length: 255, unique: true, nullable: true })
+  @Column({ nullable: true, length: 255 })
   email?: string;
 
   @Index({ unique: true })
-  @Column({ length: 20, unique: true })
+  @Column({ length: 20 })
   phone: string;
 
-  @Column({ nullable: true, select: false })
+  @Column({ nullable: true, type: 'text', select: false })
   password?: string;
 
   @Column({
@@ -48,13 +36,13 @@ export class User extends BaseEntity {
   })
   authProvider: AuthProvider;
 
-  @Column({ nullable: true, name: 'google_id' })
+  @Column({ nullable: true, name: 'google_id', length: 255 })
   googleId?: string;
 
-  @Column({ nullable: true, name: 'facebook_id' })
+  @Column({ nullable: true, name: 'facebook_id', length: 255 })
   facebookId?: string;
 
-  @Column({ nullable: true, name: 'profile_image_url' })
+  @Column({ nullable: true, name: 'profile_image_url', type: 'text' })
   profileImageUrl?: string;
 
   @Column({ default: true, name: 'is_active' })
@@ -66,25 +54,24 @@ export class User extends BaseEntity {
   @Column({ default: false, name: 'is_phone_verified' })
   isPhoneVerified: boolean;
 
-  @Column({ nullable: true, name: 'last_login_at' })
+  @Column({ nullable: true, name: 'last_login_at', type: 'timestamp' })
   lastLoginAt?: Date;
 
-  @Column({ nullable: true, name: 'fcm_token' })
+  @Column({ nullable: true, name: 'fcm_token', type: 'text' })
   fcmToken?: string;
 
-  @Column({ nullable: true, name: 'refresh_token', select: false })
+  @Column({ nullable: true, name: 'refresh_token', type: 'text', select: false })
   refreshToken?: string;
 
   // Relations
   @OneToMany(() => Student, (student) => student.user)
   students: Student[];
 
-  @OneToMany(() => UserSubscription, (subscription) => subscription.user)
-  subscriptions: UserSubscription[];
-
-  @OneToMany(() => Payment, (payment) => payment.user)
-  payments: Payment[];
-
-  @OneToMany(() => Notification, (notification) => notification.user)
-  notifications: Notification[];
+  @BeforeInsert()
+  @BeforeUpdate()
+  normalizeEmail() {
+    if (this.email) {
+      this.email = this.email.toLowerCase().trim();
+    }
+  }
 }

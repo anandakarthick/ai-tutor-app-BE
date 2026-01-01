@@ -1,41 +1,14 @@
-import { Entity, Column, ManyToOne, OneToMany, JoinColumn, Index } from 'typeorm';
+import { Entity, Column, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
 import { BaseEntity } from './BaseEntity';
 import { User } from './User';
 import { Board } from './Board';
 import { Class } from './Class';
 import { StudentInterest } from './StudentInterest';
-import { StudyPlan } from './StudyPlan';
-import { LearningSession } from './LearningSession';
-import { StudentProgress } from './StudentProgress';
-import { QuizAttempt } from './QuizAttempt';
-import { Doubt } from './Doubt';
-import { DailyProgress } from './DailyProgress';
 import { StudentAchievement } from './StudentAchievement';
+import { DailyProgress } from './DailyProgress';
+import { Gender, LearningStyle, Medium } from './enums';
 
-export enum Gender {
-  MALE = 'male',
-  FEMALE = 'female',
-  OTHER = 'other',
-}
-
-export enum LearningStyle {
-  VISUAL = 'visual',
-  AUDITORY = 'auditory',
-  KINESTHETIC = 'kinesthetic',
-  READING_WRITING = 'reading_writing',
-}
-
-export enum Medium {
-  ENGLISH = 'english',
-  HINDI = 'hindi',
-  TAMIL = 'tamil',
-  TELUGU = 'telugu',
-  KANNADA = 'kannada',
-  MALAYALAM = 'malayalam',
-  MARATHI = 'marathi',
-  BENGALI = 'bengali',
-  GUJARATI = 'gujarati',
-}
+export { Gender, LearningStyle, Medium };
 
 @Entity('students')
 export class Student extends BaseEntity {
@@ -49,7 +22,7 @@ export class Student extends BaseEntity {
   @Column({ length: 100, name: 'student_name' })
   studentName: string;
 
-  @Column({ nullable: true, name: 'date_of_birth', type: 'date' })
+  @Column({ nullable: true, type: 'date', name: 'date_of_birth' })
   dateOfBirth?: Date;
 
   @Column({
@@ -59,28 +32,28 @@ export class Student extends BaseEntity {
   })
   gender?: Gender;
 
-  @Column({ nullable: true, name: 'profile_image_url' })
+  @Column({ nullable: true, name: 'profile_image_url', type: 'text' })
   profileImageUrl?: string;
 
   @Column({ length: 255, name: 'school_name' })
   schoolName: string;
 
-  @Column({ nullable: true, name: 'school_address', type: 'text' })
+  @Column({ nullable: true, type: 'text', name: 'school_address' })
   schoolAddress?: string;
 
   @ManyToOne(() => Board)
   @JoinColumn({ name: 'board_id' })
   board: Board;
 
-  @Column({ name: 'board_id' })
-  boardId: string;
+  @Column({ name: 'board_id', nullable: true })
+  boardId?: string;
 
   @ManyToOne(() => Class)
   @JoinColumn({ name: 'class_id' })
   class: Class;
 
-  @Column({ name: 'class_id' })
-  classId: string;
+  @Column({ name: 'class_id', nullable: true })
+  classId?: string;
 
   @Column({ nullable: true, length: 10 })
   section?: string;
@@ -98,7 +71,7 @@ export class Student extends BaseEntity {
   @Column({ nullable: true, name: 'academic_year', length: 10 })
   academicYear?: string;
 
-  @Column({ nullable: true, name: 'previous_percentage', type: 'decimal', precision: 5, scale: 2 })
+  @Column({ nullable: true, type: 'decimal', precision: 5, scale: 2, name: 'previous_percentage' })
   previousPercentage?: number;
 
   @Column({
@@ -109,16 +82,16 @@ export class Student extends BaseEntity {
   })
   learningStyle?: LearningStyle;
 
-  @Column({ nullable: true, name: 'special_needs', type: 'text' })
+  @Column({ nullable: true, type: 'text', name: 'special_needs' })
   specialNeeds?: string;
 
   @Column({ default: 2, name: 'daily_study_hours' })
   dailyStudyHours: number;
 
-  @Column({ type: 'jsonb', nullable: true, name: 'preferred_study_time' })
-  preferredStudyTime?: string[];
+  @Column({ nullable: true, type: 'jsonb', name: 'preferred_study_time' })
+  preferredStudyTime?: Record<string, any>;
 
-  @Column({ nullable: true, name: 'career_goal', type: 'text' })
+  @Column({ nullable: true, type: 'text', name: 'career_goal' })
   careerGoal?: string;
 
   @Column({ nullable: true, name: 'target_exam', length: 100 })
@@ -134,7 +107,7 @@ export class Student extends BaseEntity {
   @Column({ default: 0, name: 'streak_days' })
   streakDays: number;
 
-  @Column({ nullable: true, name: 'last_activity_date', type: 'date' })
+  @Column({ nullable: true, type: 'date', name: 'last_activity_date' })
   lastActivityDate?: Date;
 
   @Column({ default: true, name: 'is_active' })
@@ -144,24 +117,9 @@ export class Student extends BaseEntity {
   @OneToMany(() => StudentInterest, (interest) => interest.student)
   interests: StudentInterest[];
 
-  @OneToMany(() => StudyPlan, (plan) => plan.student)
-  studyPlans: StudyPlan[];
-
-  @OneToMany(() => LearningSession, (session) => session.student)
-  learningSessions: LearningSession[];
-
-  @OneToMany(() => StudentProgress, (progress) => progress.student)
-  progress: StudentProgress[];
-
-  @OneToMany(() => QuizAttempt, (attempt) => attempt.student)
-  quizAttempts: QuizAttempt[];
-
-  @OneToMany(() => Doubt, (doubt) => doubt.student)
-  doubts: Doubt[];
-
-  @OneToMany(() => DailyProgress, (daily) => daily.student)
-  dailyProgress: DailyProgress[];
-
   @OneToMany(() => StudentAchievement, (achievement) => achievement.student)
   achievements: StudentAchievement[];
+
+  @OneToMany(() => DailyProgress, (progress) => progress.student)
+  dailyProgress: DailyProgress[];
 }

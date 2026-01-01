@@ -1,17 +1,9 @@
 import { Entity, Column, OneToMany } from 'typeorm';
 import { BaseEntity } from './BaseEntity';
 import { StudentAchievement } from './StudentAchievement';
+import { AchievementCategory } from './enums';
 
-export enum AchievementCategory {
-  STREAK = 'streak',
-  LEARNING = 'learning',
-  QUIZ = 'quiz',
-  DOUBT = 'doubt',
-  XP = 'xp',
-  LEVEL = 'level',
-  SOCIAL = 'social',
-  SPECIAL = 'special',
-}
+export { AchievementCategory };
 
 @Entity('achievements')
 export class Achievement extends BaseEntity {
@@ -34,16 +26,16 @@ export class Achievement extends BaseEntity {
   @Column({ nullable: true, name: 'icon_name', length: 50 })
   iconName?: string;
 
-  @Column({ nullable: true, name: 'badge_image_url' })
+  @Column({ nullable: true, name: 'badge_image_url', type: 'text' })
   badgeImageUrl?: string;
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ nullable: true, type: 'jsonb' })
   criteria?: Record<string, any>;
 
   @Column({ default: 0, name: 'xp_reward' })
   xpReward: number;
 
-  @Column({ default: 1, name: 'tier' })
+  @Column({ default: 1 })
   tier: number;
 
   @Column({ default: true, name: 'is_active' })

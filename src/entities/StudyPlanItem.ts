@@ -1,17 +1,12 @@
-import { Entity, Column, ManyToOne, JoinColumn, Index } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from './BaseEntity';
 import { StudyPlan } from './StudyPlan';
 import { Topic } from './Topic';
+import { ItemStatus } from './enums';
 
-export enum ItemStatus {
-  PENDING = 'pending',
-  IN_PROGRESS = 'in_progress',
-  COMPLETED = 'completed',
-  SKIPPED = 'skipped',
-}
+export { ItemStatus };
 
 @Entity('study_plan_items')
-@Index(['studyPlanId', 'scheduledDate'])
 export class StudyPlanItem extends BaseEntity {
   @ManyToOne(() => StudyPlan, (plan) => plan.items)
   @JoinColumn({ name: 'study_plan_id' })
@@ -30,7 +25,7 @@ export class StudyPlanItem extends BaseEntity {
   @Column({ type: 'date', name: 'scheduled_date' })
   scheduledDate: Date;
 
-  @Column({ nullable: true, name: 'scheduled_time', type: 'time' })
+  @Column({ nullable: true, type: 'time', name: 'scheduled_time' })
   scheduledTime?: string;
 
   @Column({ default: 30, name: 'duration_minutes' })
@@ -43,7 +38,7 @@ export class StudyPlanItem extends BaseEntity {
   })
   status: ItemStatus;
 
-  @Column({ nullable: true, name: 'completed_at' })
+  @Column({ nullable: true, type: 'timestamp', name: 'completed_at' })
   completedAt?: Date;
 
   @Column({ nullable: true, type: 'text' })

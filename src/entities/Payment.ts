@@ -1,41 +1,26 @@
-import { Entity, Column, ManyToOne, JoinColumn, Index } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from './BaseEntity';
 import { User } from './User';
+import { PaymentStatus, PaymentGateway } from './enums';
 
-export enum PaymentStatus {
-  PENDING = 'pending',
-  PROCESSING = 'processing',
-  SUCCESS = 'success',
-  FAILED = 'failed',
-  REFUNDED = 'refunded',
-  CANCELLED = 'cancelled',
-}
-
-export enum PaymentGateway {
-  RAZORPAY = 'razorpay',
-  STRIPE = 'stripe',
-  PAYTM = 'paytm',
-  UPI = 'upi',
-}
+export { PaymentStatus, PaymentGateway };
 
 @Entity('payments')
-@Index(['userId', 'createdAt'])
-@Index(['gatewayPaymentId'])
 export class Payment extends BaseEntity {
-  @ManyToOne(() => User, (user) => user.payments)
+  @ManyToOne(() => User)
   @JoinColumn({ name: 'user_id' })
   user: User;
 
   @Column({ name: 'user_id' })
   userId: string;
 
-  @Column({ nullable: true, name: 'gateway_order_id' })
+  @Column({ nullable: true, name: 'gateway_order_id', length: 255 })
   gatewayOrderId?: string;
 
-  @Column({ nullable: true, name: 'gateway_payment_id' })
+  @Column({ nullable: true, name: 'gateway_payment_id', length: 255 })
   gatewayPaymentId?: string;
 
-  @Column({ nullable: true, name: 'gateway_signature' })
+  @Column({ nullable: true, name: 'gateway_signature', type: 'text' })
   gatewaySignature?: string;
 
   @Column({
@@ -67,18 +52,18 @@ export class Payment extends BaseEntity {
   @Column({ nullable: true, name: 'failure_reason', type: 'text' })
   failureReason?: string;
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ nullable: true, type: 'jsonb' })
   metadata?: Record<string, any>;
 
-  @Column({ nullable: true, name: 'refund_id' })
+  @Column({ nullable: true, name: 'refund_id', length: 255 })
   refundId?: string;
 
-  @Column({ nullable: true, name: 'refund_amount', type: 'decimal', precision: 10, scale: 2 })
+  @Column({ nullable: true, type: 'decimal', precision: 10, scale: 2, name: 'refund_amount' })
   refundAmount?: number;
 
-  @Column({ nullable: true, name: 'refunded_at' })
+  @Column({ nullable: true, type: 'timestamp', name: 'refunded_at' })
   refundedAt?: Date;
 
-  @Column({ nullable: true, name: 'invoice_url' })
+  @Column({ nullable: true, type: 'text', name: 'invoice_url' })
   invoiceUrl?: string;
 }

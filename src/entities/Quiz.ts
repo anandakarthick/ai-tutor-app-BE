@@ -1,33 +1,18 @@
-import { Entity, Column, ManyToOne, OneToMany, JoinColumn, Index } from 'typeorm';
+import { Entity, Column, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
 import { BaseEntity } from './BaseEntity';
 import { Topic } from './Topic';
 import { Question } from './Question';
-import { QuizAttempt } from './QuizAttempt';
+import { QuizType, DifficultyLevel } from './enums';
 
-export enum QuizType {
-  TOPIC = 'topic',
-  CHAPTER = 'chapter',
-  SUBJECT = 'subject',
-  MOCK_TEST = 'mock_test',
-  PRACTICE = 'practice',
-  REVISION = 'revision',
-}
-
-export enum DifficultyLevel {
-  EASY = 'easy',
-  MEDIUM = 'medium',
-  HARD = 'hard',
-  MIXED = 'mixed',
-}
+export { QuizType, DifficultyLevel };
 
 @Entity('quizzes')
-@Index(['topicId', 'quizType'])
 export class Quiz extends BaseEntity {
-  @ManyToOne(() => Topic, (topic) => topic.quizzes, { nullable: true })
+  @ManyToOne(() => Topic)
   @JoinColumn({ name: 'topic_id' })
-  topic?: Topic;
+  topic: Topic;
 
-  @Column({ name: 'topic_id', nullable: true })
+  @Column({ nullable: true, name: 'topic_id' })
   topicId?: string;
 
   @Column({ length: 255, name: 'quiz_title' })
@@ -61,7 +46,7 @@ export class Quiz extends BaseEntity {
   @Column({ nullable: true, name: 'time_limit_minutes' })
   timeLimitMinutes?: number;
 
-  @Column({ default: 0, name: 'passing_percentage', type: 'decimal', precision: 5, scale: 2 })
+  @Column({ type: 'decimal', precision: 5, scale: 2, default: 0, name: 'passing_percentage' })
   passingPercentage: number;
 
   @Column({ default: true, name: 'shuffle_questions' })
@@ -79,7 +64,4 @@ export class Quiz extends BaseEntity {
   // Relations
   @OneToMany(() => Question, (question) => question.quiz)
   questions: Question[];
-
-  @OneToMany(() => QuizAttempt, (attempt) => attempt.quiz)
-  attempts: QuizAttempt[];
 }

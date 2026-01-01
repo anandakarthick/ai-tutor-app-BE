@@ -7,7 +7,7 @@ let channel: Channel | null = null;
 
 // Queue names
 export const QUEUES = {
-  NOTIFICATIONS: 'notifications',
+  NOTIFICATIONS: 'ai_notifications',
   EMAILS: 'emails',
   AI_TASKS: 'ai_tasks',
   REPORTS: 'reports',

@@ -1,29 +1,13 @@
-import { Entity, Column, ManyToOne, JoinColumn, Index } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from './BaseEntity';
 import { User } from './User';
+import { NotificationType, NotificationPriority } from './enums';
 
-export enum NotificationType {
-  SYSTEM = 'system',
-  REMINDER = 'reminder',
-  ACHIEVEMENT = 'achievement',
-  QUIZ = 'quiz',
-  SUBSCRIPTION = 'subscription',
-  STREAK = 'streak',
-  PROMOTION = 'promotion',
-  UPDATE = 'update',
-}
-
-export enum NotificationPriority {
-  LOW = 'low',
-  MEDIUM = 'medium',
-  HIGH = 'high',
-  URGENT = 'urgent',
-}
+export { NotificationType, NotificationPriority };
 
 @Entity('notifications')
-@Index(['userId', 'isRead', 'createdAt'])
 export class Notification extends BaseEntity {
-  @ManyToOne(() => User, (user) => user.notifications)
+  @ManyToOne(() => User)
   @JoinColumn({ name: 'user_id' })
   user: User;
 
@@ -44,13 +28,13 @@ export class Notification extends BaseEntity {
   @Column({ type: 'text' })
   message: string;
 
-  @Column({ nullable: true, name: 'image_url' })
+  @Column({ nullable: true, type: 'text', name: 'image_url' })
   imageUrl?: string;
 
-  @Column({ nullable: true, name: 'action_url' })
+  @Column({ nullable: true, type: 'text', name: 'action_url' })
   actionUrl?: string;
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ nullable: true, type: 'jsonb' })
   data?: Record<string, any>;
 
   @Column({
@@ -63,15 +47,15 @@ export class Notification extends BaseEntity {
   @Column({ default: false, name: 'is_read' })
   isRead: boolean;
 
-  @Column({ nullable: true, name: 'read_at' })
+  @Column({ nullable: true, type: 'timestamp', name: 'read_at' })
   readAt?: Date;
 
   @Column({ default: false, name: 'is_push_sent' })
   isPushSent: boolean;
 
-  @Column({ nullable: true, name: 'push_sent_at' })
+  @Column({ nullable: true, type: 'timestamp', name: 'push_sent_at' })
   pushSentAt?: Date;
 
-  @Column({ nullable: true, name: 'expires_at' })
+  @Column({ nullable: true, type: 'timestamp', name: 'expires_at' })
   expiresAt?: Date;
 }

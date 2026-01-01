@@ -1,17 +1,11 @@
-import { Entity, Column, ManyToOne, JoinColumn, Index } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from './BaseEntity';
 import { Student } from './Student';
+import { ReportType } from './enums';
 
-export enum ReportType {
-  DAILY = 'daily',
-  WEEKLY = 'weekly',
-  MONTHLY = 'monthly',
-  TERM = 'term',
-  CUSTOM = 'custom',
-}
+export { ReportType };
 
 @Entity('parent_reports')
-@Index(['studentId', 'reportType', 'createdAt'])
 export class ParentReport extends BaseEntity {
   @ManyToOne(() => Student)
   @JoinColumn({ name: 'student_id' })
@@ -37,15 +31,15 @@ export class ParentReport extends BaseEntity {
   @Column({ type: 'jsonb', name: 'report_data' })
   reportData: Record<string, any>;
 
-  @Column({ nullable: true, name: 'pdf_url' })
+  @Column({ nullable: true, type: 'text', name: 'pdf_url' })
   pdfUrl?: string;
 
   @Column({ default: false, name: 'is_sent' })
   isSent: boolean;
 
-  @Column({ nullable: true, name: 'sent_at' })
+  @Column({ nullable: true, type: 'timestamp', name: 'sent_at' })
   sentAt?: Date;
 
-  @Column({ nullable: true, name: 'sent_to', type: 'text' })
+  @Column({ nullable: true, type: 'text', name: 'sent_to' })
   sentTo?: string;
 }

@@ -1,19 +1,13 @@
-import { Entity, Column, Index } from 'typeorm';
+import { Entity, Column } from 'typeorm';
 import { BaseEntity } from './BaseEntity';
+import { OtpPurpose } from './enums';
 
-export enum OtpPurpose {
-  REGISTRATION = 'registration',
-  LOGIN = 'login',
-  PASSWORD_RESET = 'password_reset',
-  PHONE_VERIFICATION = 'phone_verification',
-  EMAIL_VERIFICATION = 'email_verification',
-}
+export { OtpPurpose };
 
 @Entity('otps')
-@Index(['identifier', 'purpose', 'isUsed'])
 export class Otp extends BaseEntity {
   @Column({ length: 255 })
-  identifier: string;
+  identifier: string; // Phone or email
 
   @Column({ length: 10 })
   code: string;
@@ -25,13 +19,13 @@ export class Otp extends BaseEntity {
   })
   purpose: OtpPurpose;
 
-  @Column({ name: 'expires_at' })
+  @Column({ type: 'timestamp', name: 'expires_at' })
   expiresAt: Date;
 
   @Column({ default: false, name: 'is_used' })
   isUsed: boolean;
 
-  @Column({ nullable: true, name: 'used_at' })
+  @Column({ nullable: true, type: 'timestamp', name: 'used_at' })
   usedAt?: Date;
 
   @Column({ default: 0 })

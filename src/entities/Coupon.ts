@@ -1,15 +1,13 @@
 import { Entity, Column, Index } from 'typeorm';
 import { BaseEntity } from './BaseEntity';
+import { DiscountType } from './enums';
 
-export enum DiscountType {
-  PERCENTAGE = 'percentage',
-  FIXED = 'fixed',
-}
+export { DiscountType };
 
 @Entity('coupons')
-@Index(['couponCode'], { unique: true })
 export class Coupon extends BaseEntity {
-  @Column({ length: 50, unique: true, name: 'coupon_code' })
+  @Index({ unique: true })
+  @Column({ length: 50, name: 'coupon_code' })
   couponCode: string;
 
   @Column({ nullable: true, type: 'text' })
@@ -23,13 +21,13 @@ export class Coupon extends BaseEntity {
   })
   discountType: DiscountType;
 
-  @Column({ name: 'discount_value', type: 'decimal', precision: 10, scale: 2 })
+  @Column({ type: 'decimal', precision: 10, scale: 2, name: 'discount_value' })
   discountValue: number;
 
-  @Column({ nullable: true, name: 'max_discount_amount', type: 'decimal', precision: 10, scale: 2 })
+  @Column({ nullable: true, type: 'decimal', precision: 10, scale: 2, name: 'max_discount_amount' })
   maxDiscountAmount?: number;
 
-  @Column({ nullable: true, name: 'min_order_amount', type: 'decimal', precision: 10, scale: 2 })
+  @Column({ nullable: true, type: 'decimal', precision: 10, scale: 2, name: 'min_order_amount' })
   minOrderAmount?: number;
 
   @Column({ nullable: true, name: 'max_uses' })
@@ -41,13 +39,13 @@ export class Coupon extends BaseEntity {
   @Column({ nullable: true, name: 'max_uses_per_user' })
   maxUsesPerUser?: number;
 
-  @Column({ name: 'valid_from' })
+  @Column({ type: 'timestamp', name: 'valid_from' })
   validFrom: Date;
 
-  @Column({ name: 'valid_until' })
+  @Column({ type: 'timestamp', name: 'valid_until' })
   validUntil: Date;
 
-  @Column({ type: 'jsonb', nullable: true, name: 'applicable_plans' })
+  @Column({ nullable: true, type: 'jsonb', name: 'applicable_plans' })
   applicablePlans?: string[];
 
   @Column({ default: true, name: 'is_active' })

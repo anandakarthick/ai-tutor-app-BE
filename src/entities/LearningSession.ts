@@ -1,40 +1,27 @@
-import { Entity, Column, ManyToOne, OneToMany, JoinColumn, Index } from 'typeorm';
+import { Entity, Column, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
 import { BaseEntity } from './BaseEntity';
 import { Student } from './Student';
 import { Topic } from './Topic';
 import { ChatMessage } from './ChatMessage';
+import { SessionType, SessionStatus } from './enums';
 
-export enum SessionType {
-  LEARNING = 'learning',
-  REVISION = 'revision',
-  DOUBT = 'doubt',
-  QUIZ = 'quiz',
-  PRACTICE = 'practice',
-}
-
-export enum SessionStatus {
-  ACTIVE = 'active',
-  PAUSED = 'paused',
-  COMPLETED = 'completed',
-  ABANDONED = 'abandoned',
-}
+export { SessionType, SessionStatus };
 
 @Entity('learning_sessions')
-@Index(['studentId', 'createdAt'])
 export class LearningSession extends BaseEntity {
-  @ManyToOne(() => Student, (student) => student.learningSessions)
+  @ManyToOne(() => Student)
   @JoinColumn({ name: 'student_id' })
   student: Student;
 
   @Column({ name: 'student_id' })
   studentId: string;
 
-  @ManyToOne(() => Topic, { nullable: true })
+  @ManyToOne(() => Topic)
   @JoinColumn({ name: 'topic_id' })
-  topic?: Topic;
+  topic: Topic;
 
-  @Column({ name: 'topic_id', nullable: true })
-  topicId?: string;
+  @Column({ name: 'topic_id' })
+  topicId: string;
 
   @Column({
     type: 'enum',
@@ -51,10 +38,10 @@ export class LearningSession extends BaseEntity {
   })
   status: SessionStatus;
 
-  @Column({ nullable: true, name: 'started_at' })
+  @Column({ nullable: true, type: 'timestamp', name: 'started_at' })
   startedAt?: Date;
 
-  @Column({ nullable: true, name: 'ended_at' })
+  @Column({ nullable: true, type: 'timestamp', name: 'ended_at' })
   endedAt?: Date;
 
   @Column({ default: 0, name: 'duration_seconds' })

@@ -5,161 +5,426 @@ import { AppDataSource } from '../config/database';
 import { Notification, NotificationType, NotificationPriority } from '../entities/Notification';
 import { User } from '../entities/User';
 
-// Initialize Firebase Admin
-let firebaseInitialized = false;
+// Firebase Admin SDK initialization
+let firebaseApp: admin.app.App | null = null;
 
-const initializeFirebase = () => {
-  if (firebaseInitialized) return;
+/**
+ * Initialize Firebase Admin SDK
+ * Requires service account credentials
+ */
+export const initializeFirebase = (): void => {
+  if (firebaseApp) {
+    logger.info('Firebase already initialized');
+    return;
+  }
 
-  if (config.firebase.projectId && config.firebase.clientEmail && config.firebase.privateKey) {
-    try {
-      admin.initializeApp({
-        credential: admin.credential.cert({
-          projectId: config.firebase.projectId,
-          clientEmail: config.firebase.clientEmail,
-          privateKey: config.firebase.privateKey,
-        }),
-      });
-      firebaseInitialized = true;
-      logger.info('✅ Firebase Admin initialized');
-    } catch (error) {
-      logger.error('❌ Firebase Admin initialization failed:', error);
+  try {
+    // Check if we have the required credentials
+    if (!config.firebase.projectId || !config.firebase.clientEmail || !config.firebase.privateKey) {
+      logger.warn('⚠️ Firebase credentials not configured. Push notifications will be disabled.');
+      return;
     }
-  } else {
-    logger.warn('⚠️ Firebase credentials not configured');
+
+    // Initialize with service account credentials
+    firebaseApp = admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: config.firebase.projectId,
+        clientEmail: config.firebase.clientEmail,
+        privateKey: config.firebase.privateKey.replace(/\\n/g, '\n'),
+      }),
+    });
+
+    logger.info('✅ Firebase Admin SDK initialized successfully');
+  } catch (error) {
+    logger.error('❌ Firebase initialization failed:', error);
   }
 };
 
+// Initialize on module load
 initializeFirebase();
 
-export interface PushNotificationPayload {
+/**
+ * FCM V1 API Notification Payload Interface
+ */
+export interface FCMNotificationPayload {
   title: string;
   body: string;
-  data?: Record<string, string>;
   imageUrl?: string;
 }
 
-export class NotificationService {
+/**
+ * FCM V1 API Data Payload Interface
+ */
+export interface FCMDataPayload {
+  [key: string]: string;
+}
+
+/**
+ * FCM V1 API Android Config
+ */
+export interface FCMAndroidConfig {
+  priority?: 'high' | 'normal';
+  ttl?: string; // e.g., "3600s"
+  collapseKey?: string;
+  channelId?: string;
+  icon?: string;
+  color?: string;
+  sound?: string;
+  clickAction?: string;
+}
+
+/**
+ * FCM V1 API iOS (APNS) Config
+ */
+export interface FCMApnsConfig {
+  badge?: number;
+  sound?: string;
+  category?: string;
+  threadId?: string;
+  contentAvailable?: boolean;
+  mutableContent?: boolean;
+}
+
+/**
+ * Complete FCM Message Options
+ */
+export interface FCMMessageOptions {
+  notification: FCMNotificationPayload;
+  data?: FCMDataPayload;
+  android?: FCMAndroidConfig;
+  apns?: FCMApnsConfig;
+}
+
+/**
+ * Firebase Cloud Messaging Service using V1 API
+ */
+export class FCMService {
+  private messaging: admin.messaging.Messaging | null = null;
+
+  constructor() {
+    if (firebaseApp) {
+      this.messaging = admin.messaging(firebaseApp);
+    }
+  }
+
   /**
-   * Send push notification to a single device
+   * Check if FCM is available
    */
-  async sendToDevice(fcmToken: string, payload: PushNotificationPayload): Promise<boolean> {
-    if (!firebaseInitialized) {
-      logger.warn('Firebase not initialized, skipping push notification');
-      return false;
+  isAvailable(): boolean {
+    return this.messaging !== null;
+  }
+
+  /**
+   * Build Android notification config for FCM V1 API
+   */
+  private buildAndroidConfig(
+    notification: FCMNotificationPayload,
+    androidConfig?: FCMAndroidConfig
+  ): admin.messaging.AndroidConfig {
+    return {
+      priority: androidConfig?.priority || 'high',
+      ttl: androidConfig?.ttl ? parseInt(androidConfig.ttl) * 1000 : 3600000, // Default 1 hour
+      collapseKey: androidConfig?.collapseKey,
+      notification: {
+        channelId: androidConfig?.channelId || 'ai_tutor_default',
+        icon: androidConfig?.icon || 'ic_notification',
+        color: androidConfig?.color || '#F97316', // Orange theme color
+        sound: androidConfig?.sound || 'default',
+        clickAction: androidConfig?.clickAction || 'FLUTTER_NOTIFICATION_CLICK',
+        title: notification.title,
+        body: notification.body,
+        imageUrl: notification.imageUrl,
+        priority: 'high',
+        defaultSound: true,
+        defaultVibrateTimings: true,
+      },
+    };
+  }
+
+  /**
+   * Build APNS (iOS) notification config for FCM V1 API
+   */
+  private buildApnsConfig(
+    notification: FCMNotificationPayload,
+    apnsConfig?: FCMApnsConfig
+  ): admin.messaging.ApnsConfig {
+    return {
+      headers: {
+        'apns-priority': '10', // High priority
+        'apns-push-type': 'alert',
+      },
+      payload: {
+        aps: {
+          alert: {
+            title: notification.title,
+            body: notification.body,
+          },
+          badge: apnsConfig?.badge ?? 1,
+          sound: apnsConfig?.sound || 'default',
+          category: apnsConfig?.category,
+          threadId: apnsConfig?.threadId,
+          contentAvailable: apnsConfig?.contentAvailable,
+          mutableContent: apnsConfig?.mutableContent ?? true,
+        },
+      },
+      fcmOptions: {
+        imageUrl: notification.imageUrl,
+      },
+    };
+  }
+
+  /**
+   * Send notification to a single device using FCM V1 API
+   */
+  async sendToDevice(
+    fcmToken: string,
+    options: FCMMessageOptions
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    if (!this.messaging) {
+      logger.warn('FCM not available - Firebase not initialized');
+      return { success: false, error: 'Firebase not initialized' };
     }
 
     try {
+      // Build FCM V1 API message
       const message: admin.messaging.Message = {
         token: fcmToken,
         notification: {
-          title: payload.title,
-          body: payload.body,
-          imageUrl: payload.imageUrl,
+          title: options.notification.title,
+          body: options.notification.body,
+          imageUrl: options.notification.imageUrl,
         },
-        data: payload.data,
-        android: {
-          priority: 'high',
+        data: options.data,
+        android: this.buildAndroidConfig(options.notification, options.android),
+        apns: this.buildApnsConfig(options.notification, options.apns),
+        webpush: {
           notification: {
-            channelId: 'ai_tutor_channel',
-            priority: 'high',
-            defaultSound: true,
-            defaultVibrateTimings: true,
+            title: options.notification.title,
+            body: options.notification.body,
+            icon: '/icon-192x192.png',
           },
-        },
-        apns: {
-          payload: {
-            aps: {
-              alert: {
-                title: payload.title,
-                body: payload.body,
-              },
-              sound: 'default',
-              badge: 1,
-            },
+          fcmOptions: {
+            link: options.data?.actionUrl,
           },
         },
       };
 
-      await admin.messaging().send(message);
-      logger.info(`Push notification sent to device`);
-      return true;
+      // Send using FCM V1 API
+      const response = await this.messaging.send(message);
+      
+      logger.info(`✅ FCM notification sent successfully. Message ID: ${response}`);
+      return { success: true, messageId: response };
     } catch (error: any) {
+      logger.error('❌ FCM send error:', error);
+
+      // Handle specific FCM errors
       if (error.code === 'messaging/registration-token-not-registered') {
-        logger.warn('FCM token is invalid or expired');
-      } else {
-        logger.error('Push notification failed:', error);
+        return { success: false, error: 'Token not registered - device may have uninstalled the app' };
       }
-      return false;
+      if (error.code === 'messaging/invalid-registration-token') {
+        return { success: false, error: 'Invalid FCM token format' };
+      }
+      if (error.code === 'messaging/invalid-argument') {
+        return { success: false, error: 'Invalid message payload' };
+      }
+
+      return { success: false, error: error.message };
     }
   }
 
   /**
-   * Send push notification to multiple devices
+   * Send notification to multiple devices using FCM V1 API
    */
-  async sendToDevices(fcmTokens: string[], payload: PushNotificationPayload): Promise<number> {
-    if (!firebaseInitialized || fcmTokens.length === 0) {
-      return 0;
+  async sendToDevices(
+    fcmTokens: string[],
+    options: FCMMessageOptions
+  ): Promise<{ successCount: number; failureCount: number; responses: any[] }> {
+    if (!this.messaging) {
+      logger.warn('FCM not available - Firebase not initialized');
+      return { successCount: 0, failureCount: fcmTokens.length, responses: [] };
+    }
+
+    if (fcmTokens.length === 0) {
+      return { successCount: 0, failureCount: 0, responses: [] };
     }
 
     try {
+      // Build multicast message for FCM V1 API
       const message: admin.messaging.MulticastMessage = {
         tokens: fcmTokens,
         notification: {
-          title: payload.title,
-          body: payload.body,
-          imageUrl: payload.imageUrl,
+          title: options.notification.title,
+          body: options.notification.body,
+          imageUrl: options.notification.imageUrl,
         },
-        data: payload.data,
-        android: {
-          priority: 'high',
-          notification: {
-            channelId: 'ai_tutor_channel',
-          },
-        },
+        data: options.data,
+        android: this.buildAndroidConfig(options.notification, options.android),
+        apns: this.buildApnsConfig(options.notification, options.apns),
       };
 
-      const response = await admin.messaging().sendEachForMulticast(message);
-      logger.info(`Push notifications sent: ${response.successCount}/${fcmTokens.length}`);
-      return response.successCount;
-    } catch (error) {
-      logger.error('Multicast push notification failed:', error);
-      return 0;
+      // Send using FCM V1 API multicast
+      const response = await this.messaging.sendEachForMulticast(message);
+
+      logger.info(`📤 FCM multicast: ${response.successCount} success, ${response.failureCount} failed`);
+
+      // Log failed tokens for cleanup
+      const failedTokens: string[] = [];
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success) {
+          failedTokens.push(fcmTokens[idx]);
+          logger.warn(`Failed token: ${fcmTokens[idx].substring(0, 20)}... Error: ${resp.error?.message}`);
+        }
+      });
+
+      return {
+        successCount: response.successCount,
+        failureCount: response.failureCount,
+        responses: response.responses,
+      };
+    } catch (error: any) {
+      logger.error('❌ FCM multicast error:', error);
+      return { successCount: 0, failureCount: fcmTokens.length, responses: [] };
     }
   }
 
   /**
-   * Send push notification to topic subscribers
+   * Send notification to a topic using FCM V1 API
    */
-  async sendToTopic(topic: string, payload: PushNotificationPayload): Promise<boolean> {
-    if (!firebaseInitialized) {
-      return false;
+  async sendToTopic(
+    topic: string,
+    options: FCMMessageOptions
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    if (!this.messaging) {
+      logger.warn('FCM not available - Firebase not initialized');
+      return { success: false, error: 'Firebase not initialized' };
+    }
+
+    try {
+      // Build topic message for FCM V1 API
+      const message: admin.messaging.Message = {
+        topic: topic,
+        notification: {
+          title: options.notification.title,
+          body: options.notification.body,
+          imageUrl: options.notification.imageUrl,
+        },
+        data: options.data,
+        android: this.buildAndroidConfig(options.notification, options.android),
+        apns: this.buildApnsConfig(options.notification, options.apns),
+      };
+
+      const response = await this.messaging.send(message);
+      
+      logger.info(`✅ FCM topic notification sent to '${topic}'. Message ID: ${response}`);
+      return { success: true, messageId: response };
+    } catch (error: any) {
+      logger.error(`❌ FCM topic send error for '${topic}':`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Send notification to a condition (multiple topics) using FCM V1 API
+   * Example condition: "'topic1' in topics && 'topic2' in topics"
+   */
+  async sendToCondition(
+    condition: string,
+    options: FCMMessageOptions
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    if (!this.messaging) {
+      return { success: false, error: 'Firebase not initialized' };
     }
 
     try {
       const message: admin.messaging.Message = {
-        topic,
+        condition: condition,
         notification: {
-          title: payload.title,
-          body: payload.body,
-          imageUrl: payload.imageUrl,
+          title: options.notification.title,
+          body: options.notification.body,
+          imageUrl: options.notification.imageUrl,
         },
-        data: payload.data,
+        data: options.data,
+        android: this.buildAndroidConfig(options.notification, options.android),
+        apns: this.buildApnsConfig(options.notification, options.apns),
       };
 
-      await admin.messaging().send(message);
-      logger.info(`Push notification sent to topic: ${topic}`);
-      return true;
-    } catch (error) {
-      logger.error('Topic push notification failed:', error);
-      return false;
+      const response = await this.messaging.send(message);
+      
+      logger.info(`✅ FCM condition notification sent. Message ID: ${response}`);
+      return { success: true, messageId: response };
+    } catch (error: any) {
+      logger.error('❌ FCM condition send error:', error);
+      return { success: false, error: error.message };
     }
   }
 
   /**
-   * Create and store notification in database
+   * Subscribe device tokens to a topic
    */
-  async createNotification(data: {
+  async subscribeToTopic(
+    fcmTokens: string[],
+    topic: string
+  ): Promise<{ successCount: number; failureCount: number }> {
+    if (!this.messaging) {
+      return { successCount: 0, failureCount: fcmTokens.length };
+    }
+
+    try {
+      const response = await this.messaging.subscribeToTopic(fcmTokens, topic);
+      logger.info(`📥 Subscribed ${response.successCount} devices to topic '${topic}'`);
+      return {
+        successCount: response.successCount,
+        failureCount: response.failureCount,
+      };
+    } catch (error: any) {
+      logger.error(`❌ Topic subscription error for '${topic}':`, error);
+      return { successCount: 0, failureCount: fcmTokens.length };
+    }
+  }
+
+  /**
+   * Unsubscribe device tokens from a topic
+   */
+  async unsubscribeFromTopic(
+    fcmTokens: string[],
+    topic: string
+  ): Promise<{ successCount: number; failureCount: number }> {
+    if (!this.messaging) {
+      return { successCount: 0, failureCount: fcmTokens.length };
+    }
+
+    try {
+      const response = await this.messaging.unsubscribeFromTopic(fcmTokens, topic);
+      logger.info(`📤 Unsubscribed ${response.successCount} devices from topic '${topic}'`);
+      return {
+        successCount: response.successCount,
+        failureCount: response.failureCount,
+      };
+    } catch (error: any) {
+      logger.error(`❌ Topic unsubscription error for '${topic}':`, error);
+      return { successCount: 0, failureCount: fcmTokens.length };
+    }
+  }
+}
+
+// Export singleton instance
+export const fcmService = new FCMService();
+
+/**
+ * Complete Notification Service
+ * Handles both database storage and FCM push notifications
+ */
+export class NotificationService {
+  private fcm: FCMService;
+
+  constructor() {
+    this.fcm = fcmService;
+  }
+
+  /**
+   * Create notification in database and optionally send push
+   */
+  async createAndSend(data: {
     userId: string;
     type: NotificationType;
     title: string;
@@ -172,6 +437,7 @@ export class NotificationService {
   }): Promise<Notification> {
     const notificationRepository = AppDataSource.getRepository(Notification);
 
+    // Create notification record
     const notification = notificationRepository.create({
       userId: data.userId,
       notificationType: data.type,
@@ -194,18 +460,27 @@ export class NotificationService {
       });
 
       if (user?.fcmToken) {
-        const sent = await this.sendToDevice(user.fcmToken, {
-          title: data.title,
-          body: data.message,
+        const result = await this.fcm.sendToDevice(user.fcmToken, {
+          notification: {
+            title: data.title,
+            body: data.message,
+            imageUrl: data.imageUrl,
+          },
           data: {
             notificationId: notification.id,
             type: data.type,
-            ...data.data,
+            actionUrl: data.actionUrl || '',
+            ...Object.fromEntries(
+              Object.entries(data.data || {}).map(([k, v]) => [k, String(v)])
+            ),
           },
-          imageUrl: data.imageUrl,
+          android: {
+            channelId: this.getChannelIdForType(data.type),
+            priority: data.priority === NotificationPriority.HIGH ? 'high' : 'normal',
+          },
         });
 
-        if (sent) {
+        if (result.success) {
           notification.isPushSent = true;
           notification.pushSentAt = new Date();
           await notificationRepository.save(notification);
@@ -217,10 +492,27 @@ export class NotificationService {
   }
 
   /**
+   * Get Android notification channel ID based on notification type
+   */
+  private getChannelIdForType(type: NotificationType): string {
+    const channelMap: Record<NotificationType, string> = {
+      [NotificationType.SYSTEM]: 'ai_tutor_system',
+      [NotificationType.REMINDER]: 'ai_tutor_reminders',
+      [NotificationType.ACHIEVEMENT]: 'ai_tutor_achievements',
+      [NotificationType.QUIZ]: 'ai_tutor_quiz',
+      [NotificationType.SUBSCRIPTION]: 'ai_tutor_subscription',
+      [NotificationType.STREAK]: 'ai_tutor_streak',
+      [NotificationType.PROMOTION]: 'ai_tutor_promotions',
+      [NotificationType.UPDATE]: 'ai_tutor_updates',
+    };
+    return channelMap[type] || 'ai_tutor_default';
+  }
+
+  /**
    * Send study reminder
    */
   async sendStudyReminder(userId: string, studentName: string): Promise<void> {
-    await this.createNotification({
+    await this.createAndSend({
       userId,
       type: NotificationType.REMINDER,
       title: '📚 Time to Study!',
@@ -233,7 +525,7 @@ export class NotificationService {
    * Send streak reminder
    */
   async sendStreakReminder(userId: string, streakDays: number): Promise<void> {
-    await this.createNotification({
+    await this.createAndSend({
       userId,
       type: NotificationType.STREAK,
       title: '🔥 Keep Your Streak Alive!',
@@ -251,7 +543,7 @@ export class NotificationService {
     achievementName: string,
     xpReward: number
   ): Promise<void> {
-    await this.createNotification({
+    await this.createAndSend({
       userId,
       type: NotificationType.ACHIEVEMENT,
       title: '🏆 Achievement Unlocked!',
@@ -270,7 +562,7 @@ export class NotificationService {
     score: number,
     passed: boolean
   ): Promise<void> {
-    await this.createNotification({
+    await this.createAndSend({
       userId,
       type: NotificationType.QUIZ,
       title: passed ? '🎉 Quiz Completed!' : '📝 Quiz Finished',
@@ -294,13 +586,72 @@ export class NotificationService {
       expired: `Your ${planName} subscription has expired. Renew to continue learning!`,
     };
 
-    await this.createNotification({
+    await this.createAndSend({
       userId,
       type: NotificationType.SUBSCRIPTION,
       title: type === 'activated' ? '✅ Subscription Activated' : '⚠️ Subscription Alert',
       message: messages[type],
       priority: type === 'activated' ? NotificationPriority.MEDIUM : NotificationPriority.HIGH,
       data: { screen: 'Subscription' },
+    });
+  }
+
+  /**
+   * Send topic notification to all subscribed users
+   */
+  async sendTopicNotification(
+    topic: string,
+    title: string,
+    message: string,
+    data?: Record<string, string>
+  ): Promise<{ success: boolean; messageId?: string }> {
+    return this.fcm.sendToTopic(topic, {
+      notification: { title, body: message },
+      data,
+    });
+  }
+
+  /**
+   * Send to all users (broadcast)
+   */
+  async sendBroadcast(
+    title: string,
+    message: string,
+    data?: Record<string, string>
+  ): Promise<{ success: boolean; messageId?: string }> {
+    return this.fcm.sendToTopic('all_users', {
+      notification: { title, body: message },
+      data,
+    });
+  }
+
+  /**
+   * Send to specific board users
+   */
+  async sendToBoardUsers(
+    boardName: string,
+    title: string,
+    message: string,
+    data?: Record<string, string>
+  ): Promise<{ success: boolean; messageId?: string }> {
+    return this.fcm.sendToTopic(`board_${boardName.toLowerCase()}`, {
+      notification: { title, body: message },
+      data,
+    });
+  }
+
+  /**
+   * Send to specific class users
+   */
+  async sendToClassUsers(
+    className: string,
+    title: string,
+    message: string,
+    data?: Record<string, string>
+  ): Promise<{ success: boolean; messageId?: string }> {
+    return this.fcm.sendToTopic(`class_${className}`, {
+      notification: { title, body: message },
+      data,
     });
   }
 }

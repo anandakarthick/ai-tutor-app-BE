@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import path from 'path';
 
 dotenv.config();
 
@@ -42,11 +43,18 @@ export const config = {
     apiKey: process.env.ANTHROPIC_API_KEY || '',
   },
 
-  // Firebase
+  // Firebase Cloud Messaging (FCM V1 API)
   firebase: {
+    // Service Account credentials
     projectId: process.env.FIREBASE_PROJECT_ID || '',
-    privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n') || '',
+    privateKey: process.env.FIREBASE_PRIVATE_KEY || '',
     clientEmail: process.env.FIREBASE_CLIENT_EMAIL || '',
+    
+    // Optional: Path to service account JSON file
+    serviceAccountPath: process.env.FIREBASE_SERVICE_ACCOUNT_PATH || '',
+    
+    // FCM Sender ID (from Firebase Console)
+    senderId: process.env.FIREBASE_SENDER_ID || '599635702008',
   },
 
   // Razorpay

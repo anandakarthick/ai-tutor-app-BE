@@ -1,36 +1,25 @@
-import { Entity, Column, ManyToOne, JoinColumn, Index } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from './BaseEntity';
 import { Student } from './Student';
 import { Topic } from './Topic';
+import { DoubtType, DoubtStatus } from './enums';
 
-export enum DoubtType {
-  TEXT = 'text',
-  VOICE = 'voice',
-  IMAGE = 'image',
-}
-
-export enum DoubtStatus {
-  PENDING = 'pending',
-  AI_ANSWERED = 'ai_answered',
-  ESCALATED = 'escalated',
-  RESOLVED = 'resolved',
-}
+export { DoubtType, DoubtStatus };
 
 @Entity('doubts')
-@Index(['studentId', 'createdAt'])
 export class Doubt extends BaseEntity {
-  @ManyToOne(() => Student, (student) => student.doubts)
+  @ManyToOne(() => Student)
   @JoinColumn({ name: 'student_id' })
   student: Student;
 
   @Column({ name: 'student_id' })
   studentId: string;
 
-  @ManyToOne(() => Topic, (topic) => topic.doubts, { nullable: true })
+  @ManyToOne(() => Topic)
   @JoinColumn({ name: 'topic_id' })
   topic?: Topic;
 
-  @Column({ name: 'topic_id', nullable: true })
+  @Column({ nullable: true, name: 'topic_id' })
   topicId?: string;
 
   @Column({ type: 'text' })
@@ -44,16 +33,16 @@ export class Doubt extends BaseEntity {
   })
   doubtType: DoubtType;
 
-  @Column({ nullable: true, name: 'image_url' })
+  @Column({ nullable: true, type: 'text', name: 'image_url' })
   imageUrl?: string;
 
-  @Column({ nullable: true, name: 'voice_url' })
+  @Column({ nullable: true, type: 'text', name: 'voice_url' })
   voiceUrl?: string;
 
-  @Column({ nullable: true, name: 'voice_transcript', type: 'text' })
+  @Column({ nullable: true, type: 'text', name: 'voice_transcript' })
   voiceTranscript?: string;
 
-  @Column({ nullable: true, name: 'ai_answer', type: 'text' })
+  @Column({ nullable: true, type: 'text', name: 'ai_answer' })
   aiAnswer?: string;
 
   @Column({
@@ -66,10 +55,10 @@ export class Doubt extends BaseEntity {
   @Column({ default: false, name: 'is_resolved' })
   isResolved: boolean;
 
-  @Column({ nullable: true, name: 'resolved_at' })
+  @Column({ nullable: true, type: 'timestamp', name: 'resolved_at' })
   resolvedAt?: Date;
 
-  @Column({ nullable: true, name: 'rating' })
+  @Column({ nullable: true })
   rating?: number;
 
   @Column({ nullable: true, type: 'text' })

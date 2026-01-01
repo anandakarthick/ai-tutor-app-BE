@@ -1,37 +1,32 @@
-import { Entity, Column, ManyToOne, OneToMany, JoinColumn, Index } from 'typeorm';
+import { Entity, Column, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
 import { BaseEntity } from './BaseEntity';
 import { Student } from './Student';
 import { Quiz } from './Quiz';
 import { AnswerResponse } from './AnswerResponse';
+import { AttemptStatus } from './enums';
 
-export enum AttemptStatus {
-  IN_PROGRESS = 'in_progress',
-  SUBMITTED = 'submitted',
-  TIMED_OUT = 'timed_out',
-  ABANDONED = 'abandoned',
-}
+export { AttemptStatus };
 
 @Entity('quiz_attempts')
-@Index(['studentId', 'quizId'])
 export class QuizAttempt extends BaseEntity {
-  @ManyToOne(() => Student, (student) => student.quizAttempts)
+  @ManyToOne(() => Student)
   @JoinColumn({ name: 'student_id' })
   student: Student;
 
   @Column({ name: 'student_id' })
   studentId: string;
 
-  @ManyToOne(() => Quiz, (quiz) => quiz.attempts)
+  @ManyToOne(() => Quiz)
   @JoinColumn({ name: 'quiz_id' })
   quiz: Quiz;
 
   @Column({ name: 'quiz_id' })
   quizId: string;
 
-  @Column({ name: 'started_at' })
+  @Column({ type: 'timestamp', name: 'started_at' })
   startedAt: Date;
 
-  @Column({ nullable: true, name: 'submitted_at' })
+  @Column({ nullable: true, type: 'timestamp', name: 'submitted_at' })
   submittedAt?: Date;
 
   @Column({
@@ -53,13 +48,13 @@ export class QuizAttempt extends BaseEntity {
   @Column({ default: 0, name: 'wrong_answers' })
   wrongAnswers: number;
 
-  @Column({ default: 0, name: 'marks_obtained', type: 'decimal', precision: 8, scale: 2 })
+  @Column({ type: 'decimal', precision: 8, scale: 2, default: 0, name: 'marks_obtained' })
   marksObtained: number;
 
-  @Column({ default: 0, name: 'total_marks', type: 'decimal', precision: 8, scale: 2 })
+  @Column({ type: 'decimal', precision: 8, scale: 2, default: 0, name: 'total_marks' })
   totalMarks: number;
 
-  @Column({ default: 0, type: 'decimal', precision: 5, scale: 2 })
+  @Column({ type: 'decimal', precision: 5, scale: 2, default: 0 })
   percentage: number;
 
   @Column({ default: 0, name: 'time_taken_seconds' })

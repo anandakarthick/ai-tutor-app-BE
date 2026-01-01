@@ -2,17 +2,13 @@ import { Entity, Column, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
 import { BaseEntity } from './BaseEntity';
 import { Student } from './Student';
 import { StudyPlanItem } from './StudyPlanItem';
+import { PlanStatus } from './enums';
 
-export enum PlanStatus {
-  ACTIVE = 'active',
-  COMPLETED = 'completed',
-  PAUSED = 'paused',
-  CANCELLED = 'cancelled',
-}
+export { PlanStatus };
 
 @Entity('study_plans')
 export class StudyPlan extends BaseEntity {
-  @ManyToOne(() => Student, (student) => student.studyPlans)
+  @ManyToOne(() => Student)
   @JoinColumn({ name: 'student_id' })
   student: Student;
 
@@ -34,7 +30,7 @@ export class StudyPlan extends BaseEntity {
   @Column({ default: 2, name: 'daily_hours' })
   dailyHours: number;
 
-  @Column({ type: 'jsonb', nullable: true, name: 'target_subjects' })
+  @Column({ nullable: true, type: 'jsonb', name: 'target_subjects' })
   targetSubjects?: string[];
 
   @Column({ nullable: true, name: 'target_exam', length: 100 })
@@ -47,7 +43,7 @@ export class StudyPlan extends BaseEntity {
   })
   status: PlanStatus;
 
-  @Column({ default: 0, name: 'completion_percentage', type: 'decimal', precision: 5, scale: 2 })
+  @Column({ type: 'decimal', precision: 5, scale: 2, default: 0, name: 'completion_percentage' })
   completionPercentage: number;
 
   @Column({ default: false, name: 'is_ai_generated' })

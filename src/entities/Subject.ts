@@ -2,7 +2,7 @@ import { Entity, Column, ManyToOne, OneToMany, JoinColumn, Index } from 'typeorm
 import { BaseEntity } from './BaseEntity';
 import { Class } from './Class';
 import { Book } from './Book';
-import { Medium } from './Student';
+import { Medium } from './enums';
 
 @Entity('subjects')
 @Index(['classId', 'subjectName', 'medium'], { unique: true })

@@ -1,20 +1,12 @@
-import { Entity, Column, ManyToOne, OneToMany, JoinColumn, Index } from 'typeorm';
+import { Entity, Column, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
 import { BaseEntity } from './BaseEntity';
 import { Quiz } from './Quiz';
 import { AnswerResponse } from './AnswerResponse';
+import { QuestionType } from './enums';
 
-export enum QuestionType {
-  MCQ = 'mcq',
-  TRUE_FALSE = 'true_false',
-  FILL_BLANK = 'fill_blank',
-  SHORT_ANSWER = 'short_answer',
-  LONG_ANSWER = 'long_answer',
-  MATCH = 'match',
-  ORDERING = 'ordering',
-}
+export { QuestionType };
 
 @Entity('questions')
-@Index(['quizId', 'sequenceOrder'])
 export class Question extends BaseEntity {
   @ManyToOne(() => Quiz, (quiz) => quiz.questions)
   @JoinColumn({ name: 'quiz_id' })
@@ -34,10 +26,10 @@ export class Question extends BaseEntity {
   @Column({ type: 'text', name: 'question_text' })
   questionText: string;
 
-  @Column({ nullable: true, name: 'question_image_url' })
+  @Column({ nullable: true, type: 'text', name: 'question_image_url' })
   questionImageUrl?: string;
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ nullable: true, type: 'jsonb' })
   options?: string[];
 
   @Column({ type: 'text', name: 'correct_answer' })
@@ -49,7 +41,7 @@ export class Question extends BaseEntity {
   @Column({ default: 1 })
   marks: number;
 
-  @Column({ nullable: true, name: 'negative_marks', type: 'decimal', precision: 5, scale: 2 })
+  @Column({ nullable: true, type: 'decimal', precision: 5, scale: 2, name: 'negative_marks' })
   negativeMarks?: number;
 
   @Column({ name: 'sequence_order' })
