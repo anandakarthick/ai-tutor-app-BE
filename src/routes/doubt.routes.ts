@@ -3,16 +3,17 @@ import AppDataSource from '../config/database';
 import { Doubt, DoubtStatus } from '../entities/Doubt';
 import { Student } from '../entities/Student';
 import { authenticate, AuthRequest } from '../middlewares/auth';
+import { e2eEncryption } from '../middlewares/encryption';
 import aiService from '../services/ai.service';
 
 const router = Router();
 
 /**
  * @route   POST /api/v1/doubts
- * @desc    Create a new doubt
+ * @desc    Create a new doubt (supports E2E encryption)
  * @access  Private
  */
-router.post('/', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
+router.post('/', authenticate, e2eEncryption, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { studentId, topicId, question, doubtType = 'text', imageUrl, voiceUrl } = req.body;
 

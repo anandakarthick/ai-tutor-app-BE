@@ -40,6 +40,8 @@
     "razorpay": "^2.9.4",
     "reflect-metadata": "^0.2.2",
     "socket.io": "^4.8.0",
+    "tweetnacl": "^1.0.3",
+    "tweetnacl-util": "^0.15.1",
     "typeorm": "^0.3.20",
     "uuid": "^10.0.0",
     "winston": "^3.15.0"
@@ -76,7 +78,8 @@
     "postgresql",
     "redis",
     "rabbitmq",
-    "claude-ai"
+    "claude-ai",
+    "e2e-encryption"
   ],
   "author": "KA Software",
   "license": "MIT"

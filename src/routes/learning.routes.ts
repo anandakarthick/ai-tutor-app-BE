@@ -4,16 +4,17 @@ import { LearningSession, SessionStatus } from '../entities/LearningSession';
 import { ChatMessage, SenderType, MessageType } from '../entities/ChatMessage';
 import { StudentProgress, MasteryLevel } from '../entities/StudentProgress';
 import { authenticate, AuthRequest } from '../middlewares/auth';
+import { e2eEncryption } from '../middlewares/encryption';
 import aiService from '../services/ai.service';
 
 const router = Router();
 
 /**
  * @route   POST /api/v1/learning/session
- * @desc    Start a learning session
+ * @desc    Start a learning session (supports E2E encryption)
  * @access  Private
  */
-router.post('/session', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
+router.post('/session', authenticate, e2eEncryption, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { studentId, topicId, sessionType = 'learning' } = req.body;
 
@@ -86,10 +87,10 @@ router.put('/session/:id/end', authenticate, async (req: AuthRequest, res: Respo
 
 /**
  * @route   POST /api/v1/learning/session/:id/message
- * @desc    Send message in learning session
+ * @desc    Send message in learning session (supports E2E encryption)
  * @access  Private
  */
-router.post('/session/:id/message', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
+router.post('/session/:id/message', authenticate, e2eEncryption, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
     const { content, messageType = 'text' } = req.body;

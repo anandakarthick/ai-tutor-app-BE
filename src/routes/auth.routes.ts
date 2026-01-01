@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import authService from '../services/auth.service';
 import { authenticate, AuthRequest } from '../middlewares/auth';
 import { AppError } from '../middlewares/errorHandler';
+import { handleHandshake, getServerPublicKey, e2eEncryption } from '../middlewares/encryption';
 import { OtpPurpose } from '../entities/Otp';
 import AppDataSource from '../config/database';
 import { User } from '../entities/User';
@@ -9,6 +10,20 @@ import { Student } from '../entities/Student';
 import { fcmService } from '../services/notification.service';
 
 const router = Router();
+
+/**
+ * @route   POST /api/v1/auth/handshake
+ * @desc    Perform E2E encryption handshake (key exchange)
+ * @access  Public
+ */
+router.post('/handshake', handleHandshake);
+
+/**
+ * @route   GET /api/v1/auth/public-key
+ * @desc    Get server's public key for encryption
+ * @access  Public
+ */
+router.get('/public-key', getServerPublicKey);
 
 /**
  * @route   POST /api/v1/auth/send-otp
@@ -67,10 +82,10 @@ router.post('/verify-otp', async (req: Request, res: Response, next: NextFunctio
 
 /**
  * @route   POST /api/v1/auth/register
- * @desc    Register new user
+ * @desc    Register new user (supports E2E encryption)
  * @access  Public
  */
-router.post('/register', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/register', e2eEncryption, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { fullName, phone, email, password } = req.body;
 
@@ -97,10 +112,10 @@ router.post('/register', async (req: Request, res: Response, next: NextFunction)
 
 /**
  * @route   POST /api/v1/auth/login
- * @desc    Login with phone and OTP
+ * @desc    Login with phone and OTP (supports E2E encryption)
  * @access  Public
  */
-router.post('/login', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/login', e2eEncryption, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { phone, otp } = req.body;
 
@@ -122,10 +137,10 @@ router.post('/login', async (req: Request, res: Response, next: NextFunction) =>
 
 /**
  * @route   POST /api/v1/auth/login/password
- * @desc    Login with email and password
+ * @desc    Login with email and password (supports E2E encryption)
  * @access  Public
  */
-router.post('/login/password', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/login/password', e2eEncryption, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { email, password } = req.body;
 
