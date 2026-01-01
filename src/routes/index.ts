@@ -1,0 +1,17 @@
+export { default as authRoutes } from './auth.routes';
+export { default as userRoutes } from './user.routes';
+export { default as studentRoutes } from './student.routes';
+export { default as boardRoutes } from './board.routes';
+export { default as subjectRoutes } from './subject.routes';
+export { default as bookRoutes } from './book.routes';
+export { default as chapterRoutes } from './chapter.routes';
+export { default as topicRoutes } from './topic.routes';
+export { default as learningRoutes } from './learning.routes';
+export { default as doubtRoutes } from './doubt.routes';
+export { default as quizRoutes } from './quiz.routes';
+export { default as studyPlanRoutes } from './studyPlan.routes';
+export { default as subscriptionRoutes } from './subscription.routes';
+export { default as paymentRoutes } from './payment.routes';
+export { default as progressRoutes } from './progress.routes';
+export { default as notificationRoutes } from './notification.routes';
+export { default as dashboardRoutes } from './dashboard.routes';
