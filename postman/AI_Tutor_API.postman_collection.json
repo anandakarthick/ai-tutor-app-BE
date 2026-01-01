@@ -1,0 +1,1150 @@
+{
+  "info": {
+    "name": "AI Tutor API",
+    "description": "Complete API collection for AI Tutor Backend",
+    "version": "1.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refreshToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "studentId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "description": "Authentication endpoints",
+      "item": [
+        {
+          "name": "Send OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"9876543210\",\n  \"purpose\": \"login\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/send-otp",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "send-otp"]
+            }
+          }
+        },
+        {
+          "name": "Verify OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"9876543210\",\n  \"otp\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/verify-otp",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "verify-otp"]
+            }
+          }
+        },
+        {
+          "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.data && jsonData.data.tokens) {",
+                  "    pm.collectionVariables.set('accessToken', jsonData.data.tokens.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', jsonData.data.tokens.refreshToken);",
+                  "    pm.collectionVariables.set('userId', jsonData.data.user.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"John Doe\",\n  \"phone\": \"9876543210\",\n  \"email\": \"john@example.com\",\n  \"password\": \"Password123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login with OTP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.data && jsonData.data.tokens) {",
+                  "    pm.collectionVariables.set('accessToken', jsonData.data.tokens.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', jsonData.data.tokens.refreshToken);",
+                  "    pm.collectionVariables.set('userId', jsonData.data.user.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"9876543210\",\n  \"otp\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Login with Password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.data && jsonData.data.tokens) {",
+                  "    pm.collectionVariables.set('accessToken', jsonData.data.tokens.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', jsonData.data.tokens.refreshToken);",
+                  "    pm.collectionVariables.set('userId', jsonData.data.user.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john@example.com\",\n  \"password\": \"Password123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login/password",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login", "password"]
+            }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.data) {",
+                  "    pm.collectionVariables.set('accessToken', jsonData.data.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', jsonData.data.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh-token",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "refresh-token"]
+            }
+          }
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "me"]
+            }
+          }
+        },
+        {
+          "name": "Update FCM Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fcmToken\": \"your-fcm-device-token-here\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/fcm-token",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "fcm-token"]
+            }
+          }
+        },
+        {
+          "name": "Remove FCM Token",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/fcm-token",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "fcm-token"]
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "logout"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Get All Users (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["users"],
+              "query": [
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "20"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get User by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{userId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"John Updated\",\n  \"email\": \"john.updated@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{userId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Students",
+      "item": [
+        {
+          "name": "Create Student",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.data && jsonData.data.id) {",
+                  "    pm.collectionVariables.set('studentId', jsonData.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"studentName\": \"Rahul Kumar\",\n  \"dateOfBirth\": \"2010-05-15\",\n  \"gender\": \"male\",\n  \"schoolName\": \"Delhi Public School\",\n  \"boardId\": \"<board-uuid>\",\n  \"classId\": \"<class-uuid>\",\n  \"section\": \"A\",\n  \"medium\": \"english\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/students",
+              "host": ["{{baseUrl}}"],
+              "path": ["students"]
+            }
+          }
+        },
+        {
+          "name": "Get All Students",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/students",
+              "host": ["{{baseUrl}}"],
+              "path": ["students"]
+            }
+          }
+        },
+        {
+          "name": "Get Student by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/students/{{studentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["students", "{{studentId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Student",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"studentName\": \"Rahul Kumar Updated\",\n  \"section\": \"B\",\n  \"dailyStudyHours\": 3\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/students/{{studentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["students", "{{studentId}}"]
+            }
+          }
+        },
+        {
+          "name": "Get Student Progress",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/students/{{studentId}}/progress",
+              "host": ["{{baseUrl}}"],
+              "path": ["students", "{{studentId}}", "progress"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Boards & Classes",
+      "item": [
+        {
+          "name": "Get All Boards",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/boards",
+              "host": ["{{baseUrl}}"],
+              "path": ["boards"]
+            }
+          }
+        },
+        {
+          "name": "Get Board by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/boards/:boardId",
+              "host": ["{{baseUrl}}"],
+              "path": ["boards", ":boardId"],
+              "variable": [
+                {"key": "boardId", "value": "<board-uuid>"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Classes by Board",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/boards/:boardId/classes",
+              "host": ["{{baseUrl}}"],
+              "path": ["boards", ":boardId", "classes"],
+              "variable": [
+                {"key": "boardId", "value": "<board-uuid>"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Content (Subjects/Books/Chapters/Topics)",
+      "item": [
+        {
+          "name": "Get Subjects by Class",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/subjects?classId=<class-uuid>&medium=english",
+              "host": ["{{baseUrl}}"],
+              "path": ["subjects"],
+              "query": [
+                {"key": "classId", "value": "<class-uuid>"},
+                {"key": "medium", "value": "english"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Books by Subject",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/books?subjectId=<subject-uuid>",
+              "host": ["{{baseUrl}}"],
+              "path": ["books"],
+              "query": [
+                {"key": "subjectId", "value": "<subject-uuid>"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Chapters by Book",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/chapters?bookId=<book-uuid>",
+              "host": ["{{baseUrl}}"],
+              "path": ["chapters"],
+              "query": [
+                {"key": "bookId", "value": "<book-uuid>"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Topics by Chapter",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/topics?chapterId=<chapter-uuid>",
+              "host": ["{{baseUrl}}"],
+              "path": ["topics"],
+              "query": [
+                {"key": "chapterId", "value": "<chapter-uuid>"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Topic Content",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/topics/:topicId/content",
+              "host": ["{{baseUrl}}"],
+              "path": ["topics", ":topicId", "content"],
+              "variable": [
+                {"key": "topicId", "value": "<topic-uuid>"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Learning Sessions",
+      "item": [
+        {
+          "name": "Start Learning Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"studentId\": \"{{studentId}}\",\n  \"topicId\": \"<topic-uuid>\",\n  \"sessionType\": \"learning\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/learning/session",
+              "host": ["{{baseUrl}}"],
+              "path": ["learning", "session"]
+            }
+          }
+        },
+        {
+          "name": "Send Message (AI Chat)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Can you explain photosynthesis in simple terms?\",\n  \"messageType\": \"text\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/learning/session/:sessionId/message",
+              "host": ["{{baseUrl}}"],
+              "path": ["learning", "session", ":sessionId", "message"],
+              "variable": [
+                {"key": "sessionId", "value": "<session-uuid>"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Session Messages",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/learning/session/:sessionId/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["learning", "session", ":sessionId", "messages"],
+              "variable": [
+                {"key": "sessionId", "value": "<session-uuid>"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "End Learning Session",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"xpEarned\": 50\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/learning/session/:sessionId/end",
+              "host": ["{{baseUrl}}"],
+              "path": ["learning", "session", ":sessionId", "end"],
+              "variable": [
+                {"key": "sessionId", "value": "<session-uuid>"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Doubts",
+      "item": [
+        {
+          "name": "Create Doubt",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"studentId\": \"{{studentId}}\",\n  \"topicId\": \"<topic-uuid>\",\n  \"question\": \"What is the difference between mitosis and meiosis?\",\n  \"doubtType\": \"text\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/doubts",
+              "host": ["{{baseUrl}}"],
+              "path": ["doubts"]
+            }
+          }
+        },
+        {
+          "name": "Get Doubts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/doubts?studentId={{studentId}}&page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["doubts"],
+              "query": [
+                {"key": "studentId", "value": "{{studentId}}"},
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "20"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Resolve Doubt",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rating\": 5,\n  \"feedback\": \"Very helpful explanation!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/doubts/:doubtId/resolve",
+              "host": ["{{baseUrl}}"],
+              "path": ["doubts", ":doubtId", "resolve"],
+              "variable": [
+                {"key": "doubtId", "value": "<doubt-uuid>"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Quizzes",
+      "item": [
+        {
+          "name": "Get Quizzes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/quizzes?topicId=<topic-uuid>",
+              "host": ["{{baseUrl}}"],
+              "path": ["quizzes"],
+              "query": [
+                {"key": "topicId", "value": "<topic-uuid>"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Quiz with Questions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/quizzes/:quizId",
+              "host": ["{{baseUrl}}"],
+              "path": ["quizzes", ":quizId"],
+              "variable": [
+                {"key": "quizId", "value": "<quiz-uuid>"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Start Quiz Attempt",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"studentId\": \"{{studentId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/quizzes/:quizId/attempt",
+              "host": ["{{baseUrl}}"],
+              "path": ["quizzes", ":quizId", "attempt"],
+              "variable": [
+                {"key": "quizId", "value": "<quiz-uuid>"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Submit Answer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionId\": \"<question-uuid>\",\n  \"studentAnswer\": \"A\",\n  \"timeTaken\": 30\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/quizzes/attempts/:attemptId/answer",
+              "host": ["{{baseUrl}}"],
+              "path": ["quizzes", "attempts", ":attemptId", "answer"],
+              "variable": [
+                {"key": "attemptId", "value": "<attempt-uuid>"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Submit Quiz",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/quizzes/attempts/:attemptId/submit",
+              "host": ["{{baseUrl}}"],
+              "path": ["quizzes", "attempts", ":attemptId", "submit"],
+              "variable": [
+                {"key": "attemptId", "value": "<attempt-uuid>"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Study Plans",
+      "item": [
+        {
+          "name": "Generate Study Plan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"studentId\": \"{{studentId}}\",\n  \"startDate\": \"2024-01-15\",\n  \"endDate\": \"2024-03-15\",\n  \"dailyHours\": 2,\n  \"targetSubjects\": [\"Mathematics\", \"Science\"],\n  \"targetExam\": \"Board Exams\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/study-plans/generate",
+              "host": ["{{baseUrl}}"],
+              "path": ["study-plans", "generate"]
+            }
+          }
+        },
+        {
+          "name": "Get Study Plans",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/study-plans?studentId={{studentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["study-plans"],
+              "query": [
+                {"key": "studentId", "value": "{{studentId}}"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Today's Study Items",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/study-plans/:planId/today",
+              "host": ["{{baseUrl}}"],
+              "path": ["study-plans", ":planId", "today"],
+              "variable": [
+                {"key": "planId", "value": "<plan-uuid>"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Progress",
+      "item": [
+        {
+          "name": "Get Overall Progress",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/progress/{{studentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["progress", "{{studentId}}"]
+            }
+          }
+        },
+        {
+          "name": "Get Daily Progress",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/progress/{{studentId}}/daily?days=30",
+              "host": ["{{baseUrl}}"],
+              "path": ["progress", "{{studentId}}", "daily"],
+              "query": [
+                {"key": "days", "value": "30"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Streak Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/progress/{{studentId}}/streak",
+              "host": ["{{baseUrl}}"],
+              "path": ["progress", "{{studentId}}", "streak"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Subscriptions",
+      "item": [
+        {
+          "name": "Get Subscription Plans (Public)",
+          "request": {
+            "auth": {"type": "noauth"},
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/subscriptions/plans",
+              "host": ["{{baseUrl}}"],
+              "path": ["subscriptions", "plans"]
+            }
+          }
+        },
+        {
+          "name": "Get My Subscriptions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/subscriptions",
+              "host": ["{{baseUrl}}"],
+              "path": ["subscriptions"]
+            }
+          }
+        },
+        {
+          "name": "Get Active Subscription",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/subscriptions/active",
+              "host": ["{{baseUrl}}"],
+              "path": ["subscriptions", "active"]
+            }
+          }
+        },
+        {
+          "name": "Validate Coupon",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"couponCode\": \"SAVE20\",\n  \"planId\": \"<plan-uuid>\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/subscriptions/validate-coupon",
+              "host": ["{{baseUrl}}"],
+              "path": ["subscriptions", "validate-coupon"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "Create Payment Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 999,\n  \"currency\": \"INR\",\n  \"planId\": \"<plan-uuid>\",\n  \"description\": \"Standard Plan Subscription\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/payments/create-order",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "create-order"]
+            }
+          }
+        },
+        {
+          "name": "Verify Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"razorpay_order_id\": \"order_xxxxx\",\n  \"razorpay_payment_id\": \"pay_xxxxx\",\n  \"razorpay_signature\": \"signature_xxxxx\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/payments/verify",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "verify"]
+            }
+          }
+        },
+        {
+          "name": "Get My Payments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/payments",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "Get Notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notifications?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["notifications"],
+              "query": [
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "20"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Unread Count",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/unread-count",
+              "host": ["{{baseUrl}}"],
+              "path": ["notifications", "unread-count"]
+            }
+          }
+        },
+        {
+          "name": "Mark All as Read",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/read-all",
+              "host": ["{{baseUrl}}"],
+              "path": ["notifications", "read-all"]
+            }
+          }
+        },
+        {
+          "name": "Send Test Notification",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/test",
+              "host": ["{{baseUrl}}"],
+              "path": ["notifications", "test"]
+            }
+          }
+        },
+        {
+          "name": "[Admin] FCM Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/fcm-status",
+              "host": ["{{baseUrl}}"],
+              "path": ["notifications", "fcm-status"]
+            }
+          }
+        },
+        {
+          "name": "[Admin] Broadcast to All",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Important Announcement\",\n  \"body\": \"This message goes to all users\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/notifications/broadcast",
+              "host": ["{{baseUrl}}"],
+              "path": ["notifications", "broadcast"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        {
+          "name": "Get Dashboard Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dashboard/stats?studentId={{studentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["dashboard", "stats"],
+              "query": [
+                {"key": "studentId", "value": "{{studentId}}"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Today's Plan",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dashboard/today?studentId={{studentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["dashboard", "today"],
+              "query": [
+                {"key": "studentId", "value": "{{studentId}}"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Leaderboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dashboard/leaderboard?type=weekly&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["dashboard", "leaderboard"],
+              "query": [
+                {"key": "type", "value": "weekly"},
+                {"key": "limit", "value": "10"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Achievements",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dashboard/achievements?studentId={{studentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["dashboard", "achievements"],
+              "query": [
+                {"key": "studentId", "value": "{{studentId}}"}
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
