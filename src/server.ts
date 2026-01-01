@@ -90,7 +90,7 @@ const startServer = async () => {
     }
 
     // Start server
-    server.listen(PORT, () => {
+    server.listen(PORT, '0.0.0.0',() => {
       logger.info(`🚀 Server running on port ${PORT}`);
       logger.info(`📚 API Documentation: http://localhost:${PORT}/api/v1`);
       logger.info(`🔌 Socket.IO ready for connections`);
