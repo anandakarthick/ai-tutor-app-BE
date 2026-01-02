@@ -38,6 +38,50 @@ export class AIService {
   private model = 'claude-3-5-sonnet-20241022';
 
   /**
+   * Stream teaching content line by line
+   */
+  async *streamTeaching(context: TeachingContext): AsyncGenerator<string, void, unknown> {
+    const systemPrompt = `You are a friendly AI tutor named "Buddy" teaching ${context.grade} students about ${context.subject}.
+
+Your teaching style:
+- Use very simple, conversational language like talking to a friend
+- Start with a warm greeting using the student's name
+- Break down concepts into small, easy-to-understand pieces
+- Use emojis occasionally to keep it fun 🎯
+- Give real-world examples kids can relate to
+- After explaining, ask a simple check question
+- Be encouraging and supportive
+- Keep each paragraph SHORT (2-3 sentences max)
+- Use bullet points for lists
+
+Student's name: ${context.studentName}
+Format your response in clear paragraphs, each teaching one small concept.`;
+
+    try {
+      const stream = await anthropic.messages.stream({
+        model: this.model,
+        max_tokens: 2048,
+        system: systemPrompt,
+        messages: [
+          {
+            role: 'user',
+            content: `Please teach me about "${context.topic}" in a simple, friendly way. Here's what I need to learn:\n\n${context.content}`,
+          },
+        ],
+      });
+
+      for await (const event of stream) {
+        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+          yield event.delta.text;
+        }
+      }
+    } catch (error) {
+      logger.error('AI Stream Teaching Error:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Conduct an AI teaching session
    */
   async conductTeachingSession(context: TeachingContext): Promise<string> {

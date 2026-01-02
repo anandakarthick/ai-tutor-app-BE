@@ -250,4 +250,46 @@ router.put('/progress', authenticate, async (req: AuthRequest, res: Response, ne
   }
 });
 
+/**
+ * @route   POST /api/v1/learning/teach
+ * @desc    Stream AI teaching content
+ * @access  Private
+ */
+router.post('/teach', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { studentName, grade, subject, topic, content } = req.body;
+    
+    console.log('[learning/teach] Starting AI teaching for:', { studentName, topic });
+
+    // Set headers for SSE (Server-Sent Events)
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    const teachingContext = {
+      studentName: studentName || 'Student',
+      grade: grade || 'Class 6',
+      subject: subject || 'General',
+      topic: topic || 'Lesson',
+      content: content || 'General concepts',
+    };
+
+    // Stream the teaching content
+    for await (const chunk of aiService.streamTeaching(teachingContext)) {
+      res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`);
+    }
+
+    // Send done signal
+    res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+    res.end();
+    
+  } catch (error) {
+    console.log('[learning/teach] Error:', error);
+    res.write(`data: ${JSON.stringify({ error: 'Teaching stream failed' })}\n\n`);
+    res.end();
+  }
+});
+
 export default router;
