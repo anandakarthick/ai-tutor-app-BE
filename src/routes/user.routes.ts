@@ -55,7 +55,11 @@ router.get('/:id', authenticate, async (req: AuthRequest, res: Response, next: N
     const userRepository = AppDataSource.getRepository(User);
     const user = await userRepository.findOne({
       where: { id },
-      select: ['id', 'fullName', 'email', 'phone', 'role', 'isActive', 'profileImageUrl', 'createdAt'],
+      select: [
+        'id', 'fullName', 'email', 'phone', 'role', 'isActive', 
+        'profileImageUrl', 'isEmailVerified', 'isPhoneVerified',
+        'notificationPreferences', 'createdAt', 'updatedAt'
+      ],
     });
 
     if (!user) {
@@ -78,25 +82,55 @@ router.put('/:id', authenticate, async (req: AuthRequest, res: Response, next: N
     const { id } = req.params;
     const { fullName, email, profileImageUrl } = req.body;
 
+    console.log('[UserRoutes] PUT /users/:id called');
+    console.log('[UserRoutes] User ID:', id);
+    console.log('[UserRoutes] Request body:', req.body);
+    console.log('[UserRoutes] Authenticated user:', req.user?.userId);
+
     // Users can only update their own profile unless admin
     if (req.user!.userId !== id && req.user!.role !== UserRole.ADMIN) {
+      console.log('[UserRoutes] Forbidden - user trying to update another user');
       return res.status(403).json({ success: false, message: 'Forbidden' });
     }
 
     const userRepository = AppDataSource.getRepository(User);
-    await userRepository.update(id, {
-      ...(fullName && { fullName }),
-      ...(email && { email }),
-      ...(profileImageUrl && { profileImageUrl }),
-    });
+    
+    // Check if user exists
+    const existingUser = await userRepository.findOne({ where: { id } });
+    if (!existingUser) {
+      console.log('[UserRoutes] User not found:', id);
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
 
+    // Update user
+    const updateData: any = {};
+    if (fullName) updateData.fullName = fullName;
+    if (email) updateData.email = email;
+    if (profileImageUrl !== undefined) updateData.profileImageUrl = profileImageUrl;
+
+    console.log('[UserRoutes] Update data:', updateData);
+
+    await userRepository.update(id, updateData);
+
+    // Fetch updated user with all fields
     const updatedUser = await userRepository.findOne({
       where: { id },
-      select: ['id', 'fullName', 'email', 'phone', 'role', 'profileImageUrl'],
+      select: [
+        'id', 'fullName', 'email', 'phone', 'role', 'isActive',
+        'profileImageUrl', 'isEmailVerified', 'isPhoneVerified',
+        'authProvider', 'notificationPreferences', 'createdAt', 'updatedAt'
+      ],
     });
 
-    res.json({ success: true, data: updatedUser });
+    console.log('[UserRoutes] Updated user:', updatedUser);
+
+    res.json({ 
+      success: true, 
+      data: updatedUser,
+      message: 'User updated successfully'
+    });
   } catch (error) {
+    console.log('[UserRoutes] Error updating user:', error);
     next(error);
   }
 });

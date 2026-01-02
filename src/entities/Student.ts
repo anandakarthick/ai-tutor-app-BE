@@ -35,8 +35,8 @@ export class Student extends BaseEntity {
   @Column({ nullable: true, name: 'profile_image_url', type: 'text' })
   profileImageUrl?: string;
 
-  @Column({ length: 255, name: 'school_name' })
-  schoolName: string;
+  @Column({ nullable: true, length: 255, name: 'school_name' })
+  schoolName?: string;
 
   @Column({ nullable: true, type: 'text', name: 'school_address' })
   schoolAddress?: string;
