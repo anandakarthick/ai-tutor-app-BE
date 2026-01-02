@@ -87,7 +87,25 @@ router.post('/verify-otp', async (req: Request, res: Response, next: NextFunctio
  */
 router.post('/register', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { fullName, phone, email, password, fcmToken, deviceInfo } = req.body;
+    const { 
+      fullName, 
+      phone, 
+      email, 
+      password, 
+      fcmToken, 
+      deviceInfo,
+      // Student profile data
+      studentName,
+      boardId,
+      classId,
+      medium,
+      schoolName,
+      dateOfBirth,
+      gender,
+      section,
+      learningStyle,
+      dailyStudyHours,
+    } = req.body;
 
     if (!fullName || !phone) {
       throw new AppError('Full name and phone are required', 400, 'MISSING_FIELDS');
@@ -100,6 +118,17 @@ router.post('/register', async (req: Request, res: Response, next: NextFunction)
       password,
       fcmToken,
       deviceInfo,
+      // Student profile data
+      studentName,
+      boardId,
+      classId,
+      medium,
+      schoolName,
+      dateOfBirth,
+      gender,
+      section,
+      learningStyle,
+      dailyStudyHours,
     });
 
     res.status(201).json({

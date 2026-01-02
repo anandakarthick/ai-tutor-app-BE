@@ -4,11 +4,13 @@ import { v4 as uuidv4 } from 'uuid';
 import { Repository } from 'typeorm';
 import AppDataSource from '../config/database';
 import { User, UserRole, AuthProvider } from '../entities/User';
+import { Student } from '../entities/Student';
 import { Otp, OtpPurpose } from '../entities/Otp';
 import { config } from '../config';
 import { AppError } from '../middlewares/errorHandler';
 import { cacheService, redisClient } from '../config/redis';
 import { logger } from '../utils/logger';
+import { Medium, Gender, LearningStyle } from '../entities/enums';
 
 interface RegisterDto {
   fullName: string;
@@ -21,6 +23,17 @@ interface RegisterDto {
   facebookId?: string;
   fcmToken?: string;
   deviceInfo?: string;
+  // Student profile data
+  studentName?: string;
+  boardId?: string;
+  classId?: string;
+  medium?: string;
+  schoolName?: string;
+  dateOfBirth?: string;
+  gender?: string;
+  section?: string;
+  learningStyle?: string;
+  dailyStudyHours?: number;
 }
 
 interface LoginDto {
@@ -42,10 +55,12 @@ interface TokenPayload {
 export class AuthService {
   private userRepository: Repository<User>;
   private otpRepository: Repository<Otp>;
+  private studentRepository: Repository<Student>;
 
   constructor() {
     this.userRepository = AppDataSource.getRepository(User);
     this.otpRepository = AppDataSource.getRepository(Otp);
+    this.studentRepository = AppDataSource.getRepository(Student);
   }
 
   /**
@@ -147,7 +162,7 @@ export class AuthService {
   /**
    * Register new user
    */
-  async register(data: RegisterDto): Promise<{ user: User; tokens: { accessToken: string; refreshToken: string }; sessionId: string }> {
+  async register(data: RegisterDto): Promise<{ user: User; tokens: { accessToken: string; refreshToken: string }; sessionId: string; student?: Student }> {
     // Check if user exists
     const existingUser = await this.userRepository.findOne({
       where: [
@@ -188,6 +203,35 @@ export class AuthService {
 
     await this.userRepository.save(user);
 
+    // Create student profile if student data is provided
+    let student: Student | undefined;
+    if (data.studentName && data.boardId && data.classId) {
+      student = this.studentRepository.create({
+        userId: user.id,
+        studentName: data.studentName,
+        boardId: data.boardId,
+        classId: data.classId,
+        medium: (data.medium as Medium) || Medium.ENGLISH,
+        schoolName: data.schoolName,
+        dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : undefined,
+        gender: data.gender as Gender,
+        section: data.section,
+        learningStyle: data.learningStyle as LearningStyle,
+        dailyStudyHours: data.dailyStudyHours || 2,
+        academicYear: new Date().getFullYear().toString(),
+      });
+
+      await this.studentRepository.save(student);
+      
+      // Load student with relations for response
+      student = await this.studentRepository.findOne({
+        where: { id: student.id },
+        relations: ['board', 'class'],
+      }) || student;
+      
+      logger.info(`Student profile created: ${student.id} for user: ${user.id}`);
+    }
+
     // Mark OTP as used after successful registration
     await this.consumeOtp(data.phone, '', OtpPurpose.REGISTRATION);
 
@@ -210,7 +254,7 @@ export class AuthService {
 
     logger.info(`User registered: ${user.id}, Session: ${sessionId}`);
 
-    return { user, tokens, sessionId };
+    return { user, tokens, sessionId, student };
   }
 
   /**
