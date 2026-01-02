@@ -39,7 +39,13 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response, next: Nex
 
     await studentRepository.save(student);
 
-    res.status(201).json({ success: true, data: student });
+    // Fetch the student with relations to return complete data
+    const savedStudent = await studentRepository.findOne({
+      where: { id: student.id },
+      relations: ['board', 'class'],
+    });
+
+    res.status(201).json({ success: true, data: savedStudent });
   } catch (error) {
     next(error);
   }
