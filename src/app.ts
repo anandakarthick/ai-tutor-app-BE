@@ -55,18 +55,34 @@ if (config.nodeEnv !== 'test') {
   app.use(morgan('combined', { stream }));
 }
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: config.rateLimitWindowMs,
-  max: config.rateLimitMaxRequests,
-  message: {
-    success: false,
-    message: 'Too many requests, please try again later.',
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-app.use('/api', limiter);
+// Rate limiting - only in production, or with higher limits in development
+if (config.nodeEnv === 'production') {
+  const limiter = rateLimit({
+    windowMs: config.rateLimitWindowMs,
+    max: config.rateLimitMaxRequests,
+    message: {
+      success: false,
+      message: 'Too many requests, please try again later.',
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+  app.use('/api', limiter);
+} else {
+  // Development: Much higher limits (10000 requests per 15 minutes)
+  const devLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 10000, // 10000 requests per window
+    message: {
+      success: false,
+      message: 'Too many requests, please try again later.',
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+  app.use('/api', devLimiter);
+  console.log('🔓 Development mode: Rate limiting relaxed (10000 req/15min)');
+}
 
 // Health check endpoint
 app.get('/health', (req: Request, res: Response) => {
