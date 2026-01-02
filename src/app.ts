@@ -27,6 +27,7 @@ import paymentRoutes from './routes/payment.routes';
 import progressRoutes from './routes/progress.routes';
 import notificationRoutes from './routes/notification.routes';
 import dashboardRoutes from './routes/dashboard.routes';
+import settingsRoutes from './routes/settings.routes';
 
 const app: Application = express();
 
@@ -98,6 +99,7 @@ app.use(`${apiPrefix}/payments`, paymentRoutes);
 app.use(`${apiPrefix}/progress`, progressRoutes);
 app.use(`${apiPrefix}/notifications`, notificationRoutes);
 app.use(`${apiPrefix}/dashboard`, dashboardRoutes);
+app.use(`${apiPrefix}/settings`, settingsRoutes);
 
 // 404 handler
 app.use(notFoundHandler);

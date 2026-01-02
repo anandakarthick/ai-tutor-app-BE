@@ -15,3 +15,4 @@ export { default as paymentRoutes } from './payment.routes';
 export { default as progressRoutes } from './progress.routes';
 export { default as notificationRoutes } from './notification.routes';
 export { default as dashboardRoutes } from './dashboard.routes';
+export { default as settingsRoutes } from './settings.routes';

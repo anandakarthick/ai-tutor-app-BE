@@ -63,6 +63,22 @@ export class User extends BaseEntity {
   @Column({ nullable: true, name: 'refresh_token', type: 'text', select: false })
   refreshToken?: string;
 
+  @Column({ 
+    type: 'jsonb', 
+    nullable: true, 
+    name: 'notification_preferences',
+    default: () => `'{"masterEnabled":true,"studyReminders":true,"quizAlerts":true,"achievements":true,"newContent":true,"tips":false,"promotions":false}'::jsonb`
+  })
+  notificationPreferences?: {
+    masterEnabled: boolean;
+    studyReminders: boolean;
+    quizAlerts: boolean;
+    achievements: boolean;
+    newContent: boolean;
+    tips: boolean;
+    promotions: boolean;
+  };
+
   // Relations
   @OneToMany(() => Student, (student) => student.user)
   students: Student[];
