@@ -69,7 +69,7 @@ export class AuthService {
   }
 
   /**
-   * Verify OTP
+   * Verify OTP (just validates, doesn't mark as used)
    */
   async verifyOtp(phone: string, code: string, purpose: OtpPurpose = OtpPurpose.LOGIN): Promise<boolean> {
     const otp = await this.otpRepository.findOne({
@@ -94,11 +94,41 @@ export class AuthService {
       throw new AppError('Too many attempts. Please request a new OTP', 400, 'TOO_MANY_ATTEMPTS');
     }
 
-    // Mark OTP as used
-    otp.isUsed = true;
-    otp.usedAt = new Date();
+    // Increment attempts but DON'T mark as used yet
+    // OTP will be marked as used when login/register completes
+    otp.attempts += 1;
     await this.otpRepository.save(otp);
 
+    return true;
+  }
+
+  /**
+   * Consume OTP (mark as used after successful login/register)
+   */
+  private async consumeOtp(phone: string, code: string, purpose: OtpPurpose = OtpPurpose.LOGIN): Promise<void> {
+    const otp = await this.otpRepository.findOne({
+      where: {
+        identifier: phone,
+        code,
+        purpose,
+        isUsed: false,
+      },
+      order: { createdAt: 'DESC' },
+    });
+
+    if (otp) {
+      otp.isUsed = true;
+      otp.usedAt = new Date();
+      await this.otpRepository.save(otp);
+    }
+  }
+
+  /**
+   * Verify and consume OTP in one step (for endpoints that don't need separate verify)
+   */
+  async verifyAndConsumeOtp(phone: string, code: string, purpose: OtpPurpose = OtpPurpose.LOGIN): Promise<boolean> {
+    await this.verifyOtp(phone, code, purpose);
+    await this.consumeOtp(phone, code, purpose);
     return true;
   }
 
@@ -139,6 +169,9 @@ export class AuthService {
 
     await this.userRepository.save(user);
 
+    // Mark OTP as used after successful registration
+    await this.consumeOtp(data.phone, '', OtpPurpose.REGISTRATION);
+
     // Generate tokens
     const tokens = this.generateTokens({
       userId: user.id,
@@ -168,10 +201,7 @@ export class AuthService {
       throw new AppError('OTP is required', 400, 'OTP_REQUIRED');
     }
 
-    // Verify OTP
-    await this.verifyOtp(phone, otp);
-
-    // Find or create user
+    // Find user first (before consuming OTP)
     let user = await this.userRepository.findOne({ where: { phone } });
 
     if (!user) {
@@ -181,6 +211,9 @@ export class AuthService {
     if (!user.isActive) {
       throw new AppError('Your account has been deactivated', 403, 'ACCOUNT_INACTIVE');
     }
+
+    // Verify and consume OTP
+    await this.verifyAndConsumeOtp(phone, otp);
 
     // Update last login
     user.lastLoginAt = new Date();
