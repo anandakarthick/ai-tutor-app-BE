@@ -38,6 +38,10 @@ export const config = {
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d',
   },
 
+  // E2E Encryption
+  encryptionEnabled: process.env.ENCRYPTION_ENABLED === 'true',
+  encryptionSecretKey: process.env.ENCRYPTION_SECRET_KEY || '',
+
   // Claude AI (Anthropic)
   anthropic: {
     apiKey: process.env.ANTHROPIC_API_KEY || '',

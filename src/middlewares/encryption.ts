@@ -1,10 +1,11 @@
 /**
  * E2E Encryption Middleware
- * Automatically handles encrypted requests and responses
+ * Automatically handles encrypted requests and responses for all API routes
  */
 
 import { Request, Response, NextFunction } from 'express';
 import { encryptionService } from '../services/encryption.service';
+import { config } from '../config';
 
 interface EncryptedPayload {
   ciphertext: string;
@@ -27,10 +28,15 @@ interface EncryptedRequest extends Request {
  * Middleware to decrypt incoming encrypted requests
  */
 export function decryptRequest(req: EncryptedRequest, res: Response, next: NextFunction) {
+  // Skip if encryption is disabled
+  if (!config.encryptionEnabled) {
+    return next();
+  }
+
   try {
     // Check if request is encrypted
     if (req.body?.encrypted && req.body?.payload) {
-      console.log('🔐 Processing encrypted request...');
+      console.log('🔐 Processing encrypted request:', req.method, req.path);
       
       // Store client public key for response encryption
       req.clientPublicKey = req.body.payload.publicKey;
@@ -63,6 +69,11 @@ export function decryptRequest(req: EncryptedRequest, res: Response, next: NextF
  * Middleware to encrypt outgoing responses
  */
 export function encryptResponse(req: EncryptedRequest, res: Response, next: NextFunction) {
+  // Skip if encryption is disabled
+  if (!config.encryptionEnabled) {
+    return next();
+  }
+
   // Store original json method
   const originalJson = res.json.bind(res);
   
@@ -71,7 +82,7 @@ export function encryptResponse(req: EncryptedRequest, res: Response, next: Next
     // Only encrypt if the request was encrypted and we have the client's public key
     if (req.isEncrypted && req.clientPublicKey) {
       try {
-        console.log('🔐 Encrypting response...');
+        console.log('🔐 Encrypting response for:', req.method, req.path);
         
         const encryptedResponse = encryptionService.createEncryptedResponse(
           data,
@@ -93,9 +104,14 @@ export function encryptResponse(req: EncryptedRequest, res: Response, next: Next
 }
 
 /**
- * Combined middleware for encryption
+ * Combined middleware for encryption (for specific routes)
  */
 export function e2eEncryption(req: EncryptedRequest, res: Response, next: NextFunction) {
+  // Skip if encryption is disabled
+  if (!config.encryptionEnabled) {
+    return next();
+  }
+
   // First set up response encryption
   const originalJson = res.json.bind(res);
   
@@ -147,11 +163,8 @@ export function handleHandshake(req: Request, res: Response) {
         code: 'MISSING_PUBLIC_KEY',
       });
     }
-    
-    // Register client's public key (optional, for session tracking)
-    // encryptionService.registerClientKey(clientId, clientPublicKey);
-    
-    // Return server's public key
+
+    // Return server's public key and encryption status
     const serverPublicKey = encryptionService.getPublicKey();
     
     res.status(200).json({
@@ -159,7 +172,7 @@ export function handleHandshake(req: Request, res: Response) {
       message: 'Handshake successful',
       data: {
         serverPublicKey,
-        // Optionally include a session ID or other metadata
+        encryptionEnabled: config.encryptionEnabled,
         timestamp: new Date().toISOString(),
       },
     });
@@ -181,6 +194,7 @@ export function getServerPublicKey(req: Request, res: Response) {
     success: true,
     data: {
       publicKey: encryptionService.getPublicKey(),
+      encryptionEnabled: config.encryptionEnabled,
     },
   });
 }

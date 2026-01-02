@@ -2,7 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import authService from '../services/auth.service';
 import { authenticate, AuthRequest } from '../middlewares/auth';
 import { AppError } from '../middlewares/errorHandler';
-import { handleHandshake, getServerPublicKey, e2eEncryption } from '../middlewares/encryption';
+import { handleHandshake, getServerPublicKey } from '../middlewares/encryption';
 import { OtpPurpose } from '../entities/Otp';
 import AppDataSource from '../config/database';
 import { User } from '../entities/User';
@@ -82,10 +82,10 @@ router.post('/verify-otp', async (req: Request, res: Response, next: NextFunctio
 
 /**
  * @route   POST /api/v1/auth/register
- * @desc    Register new user (supports E2E encryption)
+ * @desc    Register new user
  * @access  Public
  */
-router.post('/register', e2eEncryption, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/register', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { fullName, phone, email, password, fcmToken, deviceInfo } = req.body;
 
@@ -117,10 +117,10 @@ router.post('/register', e2eEncryption, async (req: Request, res: Response, next
 
 /**
  * @route   POST /api/v1/auth/login
- * @desc    Login with phone and OTP (supports E2E encryption)
+ * @desc    Login with phone and OTP
  * @access  Public
  */
-router.post('/login', e2eEncryption, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/login', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { phone, otp, fcmToken, deviceInfo } = req.body;
 
@@ -163,10 +163,10 @@ router.post('/login', e2eEncryption, async (req: Request, res: Response, next: N
 
 /**
  * @route   POST /api/v1/auth/login/password
- * @desc    Login with email and password (supports E2E encryption)
+ * @desc    Login with email and password
  * @access  Public
  */
-router.post('/login/password', e2eEncryption, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/login/password', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { email, password, fcmToken, deviceInfo } = req.body;
 

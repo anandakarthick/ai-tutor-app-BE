@@ -7,6 +7,7 @@ import rateLimit from 'express-rate-limit';
 
 import { config } from './config';
 import { errorHandler, notFoundHandler } from './middlewares/errorHandler';
+import { decryptRequest, encryptResponse } from './middlewares/encryption';
 import { logger, stream } from './utils/logger';
 
 // Import routes
@@ -38,7 +39,7 @@ app.use(helmet());
 app.use(cors({
   origin: config.corsOrigins,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Encryption-Enabled'],
   credentials: true,
   maxAge: 86400, // 24 hours
 }));
@@ -84,7 +85,7 @@ if (config.nodeEnv === 'production') {
   console.log('🔓 Development mode: Rate limiting relaxed (10000 req/15min)');
 }
 
-// Health check endpoint
+// Health check endpoint (no encryption)
 app.get('/health', (req: Request, res: Response) => {
   res.json({
     success: true,
@@ -92,12 +93,21 @@ app.get('/health', (req: Request, res: Response) => {
     timestamp: new Date().toISOString(),
     version: config.apiVersion,
     environment: config.nodeEnv,
+    encryption: config.encryptionEnabled ? 'enabled' : 'disabled',
   });
 });
 
-// API Routes
+// API prefix
 const apiPrefix = `/api/${config.apiVersion}`;
 
+// Apply E2E encryption middleware to all API routes
+if (config.encryptionEnabled) {
+  console.log('🔐 E2E Encryption enabled for all API routes');
+  app.use(apiPrefix, decryptRequest);
+  app.use(apiPrefix, encryptResponse);
+}
+
+// API Routes
 app.use(`${apiPrefix}/auth`, authRoutes);
 app.use(`${apiPrefix}/users`, userRoutes);
 app.use(`${apiPrefix}/students`, studentRoutes);

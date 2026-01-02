@@ -6,6 +6,7 @@
 import nacl from 'tweetnacl';
 import naclUtil from 'tweetnacl-util';
 import crypto from 'crypto';
+import { config } from '../config';
 
 interface KeyPair {
   publicKey: string;
@@ -27,29 +28,42 @@ interface DecryptedRequest {
 class EncryptionService {
   private serverKeyPair: nacl.BoxKeyPair;
   private clientPublicKeys: Map<string, Uint8Array> = new Map();
+  private isInitialized: boolean = false;
 
   constructor() {
     // Generate server key pair on startup
-    // In production, load from secure storage/HSM
     this.serverKeyPair = this.loadOrGenerateKeyPair();
-    console.log('🔐 Encryption service initialized');
-    console.log('🔑 Server public key:', this.getPublicKey().substring(0, 20) + '...');
+    this.isInitialized = true;
+    
+    if (config.encryptionEnabled) {
+      console.log('🔐 Encryption service initialized');
+      console.log('🔑 Server public key:', this.getPublicKey().substring(0, 20) + '...');
+    } else {
+      console.log('🔓 Encryption service initialized (encryption disabled)');
+    }
+  }
+
+  /**
+   * Check if encryption is enabled
+   */
+  isEnabled(): boolean {
+    return config.encryptionEnabled && this.isInitialized;
   }
 
   /**
    * Load or generate server key pair
    */
   private loadOrGenerateKeyPair(): nacl.BoxKeyPair {
-    // In production, load from environment variable or secure storage
-    const storedSecretKey = process.env.ENCRYPTION_SECRET_KEY;
+    // In production, load from environment variable
+    const storedSecretKey = config.encryptionSecretKey;
     
     if (storedSecretKey) {
       try {
         const secretKey = naclUtil.decodeBase64(storedSecretKey);
-        // Derive public key from secret key
+        console.log('🔑 Loaded encryption key from environment');
         return nacl.box.keyPair.fromSecretKey(secretKey);
       } catch (error) {
-        console.warn('Failed to load stored key, generating new one');
+        console.warn('⚠️ Failed to load stored key, generating new one');
       }
     }
 
@@ -57,8 +71,8 @@ class EncryptionService {
     const keyPair = nacl.box.keyPair();
     
     // Log secret key for storing (only in development)
-    if (process.env.NODE_ENV === 'development') {
-      console.log('⚠️ New encryption key generated. Store this securely:');
+    if (config.nodeEnv === 'development') {
+      console.log('⚠️ New encryption key generated. Add this to .env:');
       console.log('ENCRYPTION_SECRET_KEY=' + naclUtil.encodeBase64(keyPair.secretKey));
     }
 
