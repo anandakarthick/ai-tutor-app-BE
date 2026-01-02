@@ -11,6 +11,7 @@ export interface JwtPayload {
   email?: string;
   phone: string;
   role: UserRole;
+  sessionId: string;
   iat: number;
   exp: number;
 }
@@ -55,6 +56,30 @@ export const authenticate = async (
 
     if (!user) {
       throw new AppError('User not found or inactive', 401, 'USER_NOT_FOUND');
+    }
+
+    // Check if session is still valid (single device login check)
+    if (decoded.sessionId && user.activeSessionId) {
+      if (decoded.sessionId !== user.activeSessionId) {
+        // Session was terminated because user logged in on another device
+        throw new AppError(
+          'Your session has been terminated because you logged in on another device.',
+          401,
+          'SESSION_TERMINATED'
+        );
+      }
+    }
+
+    // Check if session is invalidated in Redis
+    if (decoded.sessionId && redisClient) {
+      const isSessionInvalidated = await redisClient.get(`session:invalidated:${decoded.sessionId}`);
+      if (isSessionInvalidated) {
+        throw new AppError(
+          'Your session has been terminated because you logged in on another device.',
+          401,
+          'SESSION_TERMINATED'
+        );
+      }
     }
 
     // Attach user to request
@@ -104,6 +129,7 @@ export const optionalAuth = async (
     });
 
     if (user) {
+      // Skip session check for optional auth
       req.user = decoded;
       req.currentUser = user;
     }
@@ -160,11 +186,20 @@ export const verifyRefreshToken = async (
     const userRepository = AppDataSource.getRepository(User);
     const user = await userRepository.findOne({
       where: { id: decoded.userId, isActive: true },
-      select: ['id', 'email', 'phone', 'role', 'refreshToken'],
+      select: ['id', 'email', 'phone', 'role', 'refreshToken', 'activeSessionId'],
     });
 
     if (!user || user.refreshToken !== refreshToken) {
       throw new AppError('Invalid refresh token', 401, 'INVALID_REFRESH_TOKEN');
+    }
+
+    // Check session validity
+    if (decoded.sessionId && user.activeSessionId && decoded.sessionId !== user.activeSessionId) {
+      throw new AppError(
+        'Your session has been terminated because you logged in on another device.',
+        401,
+        'SESSION_TERMINATED'
+      );
     }
 
     req.user = decoded;

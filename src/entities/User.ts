@@ -63,6 +63,14 @@ export class User extends BaseEntity {
   @Column({ nullable: true, name: 'refresh_token', type: 'text', select: false })
   refreshToken?: string;
 
+  // Active session ID for single device login
+  @Column({ nullable: true, name: 'active_session_id', length: 255 })
+  activeSessionId?: string;
+
+  // Device info for the active session
+  @Column({ nullable: true, name: 'active_device_info', type: 'text' })
+  activeDeviceInfo?: string;
+
   @Column({ 
     type: 'jsonb', 
     nullable: true, 

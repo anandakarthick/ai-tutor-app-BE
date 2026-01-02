@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { v4 as uuidv4 } from 'uuid';
 import { Repository } from 'typeorm';
 import AppDataSource from '../config/database';
 import { User, UserRole, AuthProvider } from '../entities/User';
@@ -18,12 +19,16 @@ interface RegisterDto {
   authProvider?: AuthProvider;
   googleId?: string;
   facebookId?: string;
+  fcmToken?: string;
+  deviceInfo?: string;
 }
 
 interface LoginDto {
   phone: string;
   password?: string;
   otp?: string;
+  fcmToken?: string;
+  deviceInfo?: string;
 }
 
 interface TokenPayload {
@@ -31,6 +36,7 @@ interface TokenPayload {
   email?: string;
   phone: string;
   role: UserRole;
+  sessionId: string;
 }
 
 export class AuthService {
@@ -95,7 +101,6 @@ export class AuthService {
     }
 
     // Increment attempts but DON'T mark as used yet
-    // OTP will be marked as used when login/register completes
     otp.attempts += 1;
     await this.otpRepository.save(otp);
 
@@ -124,7 +129,7 @@ export class AuthService {
   }
 
   /**
-   * Verify and consume OTP in one step (for endpoints that don't need separate verify)
+   * Verify and consume OTP in one step
    */
   async verifyAndConsumeOtp(phone: string, code: string, purpose: OtpPurpose = OtpPurpose.LOGIN): Promise<boolean> {
     await this.verifyOtp(phone, code, purpose);
@@ -133,9 +138,16 @@ export class AuthService {
   }
 
   /**
+   * Generate unique session ID
+   */
+  private generateSessionId(): string {
+    return uuidv4();
+  }
+
+  /**
    * Register new user
    */
-  async register(data: RegisterDto): Promise<{ user: User; tokens: { accessToken: string; refreshToken: string } }> {
+  async register(data: RegisterDto): Promise<{ user: User; tokens: { accessToken: string; refreshToken: string }; sessionId: string }> {
     // Check if user exists
     const existingUser = await this.userRepository.findOne({
       where: [
@@ -154,6 +166,9 @@ export class AuthService {
       hashedPassword = await bcrypt.hash(data.password, 12);
     }
 
+    // Generate session ID for single device login
+    const sessionId = this.generateSessionId();
+
     // Create user
     const user = this.userRepository.create({
       fullName: data.fullName,
@@ -164,7 +179,11 @@ export class AuthService {
       authProvider: data.authProvider || AuthProvider.LOCAL,
       googleId: data.googleId,
       facebookId: data.facebookId,
-      isPhoneVerified: true, // Assuming OTP was verified before registration
+      isPhoneVerified: true,
+      fcmToken: data.fcmToken,
+      activeSessionId: sessionId,
+      activeDeviceInfo: data.deviceInfo,
+      lastLoginAt: new Date(),
     });
 
     await this.userRepository.save(user);
@@ -172,12 +191,13 @@ export class AuthService {
     // Mark OTP as used after successful registration
     await this.consumeOtp(data.phone, '', OtpPurpose.REGISTRATION);
 
-    // Generate tokens
+    // Generate tokens with session ID
     const tokens = this.generateTokens({
       userId: user.id,
       email: user.email,
       phone: user.phone,
       role: user.role,
+      sessionId,
     });
 
     // Save refresh token
@@ -188,14 +208,16 @@ export class AuthService {
     delete (user as any).password;
     delete (user as any).refreshToken;
 
-    return { user, tokens };
+    logger.info(`User registered: ${user.id}, Session: ${sessionId}`);
+
+    return { user, tokens, sessionId };
   }
 
   /**
    * Login with phone and OTP
    */
-  async loginWithOtp(data: LoginDto): Promise<{ user: User; tokens: { accessToken: string; refreshToken: string } }> {
-    const { phone, otp } = data;
+  async loginWithOtp(data: LoginDto): Promise<{ user: User; tokens: { accessToken: string; refreshToken: string }; sessionId: string; previousSessionTerminated: boolean }> {
+    const { phone, otp, fcmToken, deviceInfo } = data;
 
     if (!otp) {
       throw new AppError('OTP is required', 400, 'OTP_REQUIRED');
@@ -215,35 +237,58 @@ export class AuthService {
     // Verify and consume OTP
     await this.verifyAndConsumeOtp(phone, otp);
 
-    // Update last login
+    // Check if there was an existing session (for notification)
+    const previousSessionId = user.activeSessionId;
+    const previousSessionTerminated = !!previousSessionId;
+
+    // Generate new session ID for single device login
+    const sessionId = this.generateSessionId();
+
+    // Update user with new session
     user.lastLoginAt = new Date();
     user.isPhoneVerified = true;
+    user.activeSessionId = sessionId;
+    user.activeDeviceInfo = deviceInfo || 'Unknown Device';
+    
+    // Update FCM token if provided
+    if (fcmToken) {
+      user.fcmToken = fcmToken;
+    }
 
-    // Generate tokens
+    // Generate tokens with session ID
     const tokens = this.generateTokens({
       userId: user.id,
       email: user.email,
       phone: user.phone,
       role: user.role,
+      sessionId,
     });
 
     user.refreshToken = tokens.refreshToken;
     await this.userRepository.save(user);
 
+    // If there was a previous session, blacklist it
+    if (previousSessionId) {
+      await this.invalidateSession(user.id, previousSessionId);
+      logger.info(`Previous session terminated for user ${user.id}: ${previousSessionId}`);
+    }
+
     // Remove sensitive data
     delete (user as any).password;
     delete (user as any).refreshToken;
 
-    return { user, tokens };
+    logger.info(`User logged in: ${user.id}, Session: ${sessionId}, FCM: ${fcmToken ? 'Yes' : 'No'}`);
+
+    return { user, tokens, sessionId, previousSessionTerminated };
   }
 
   /**
    * Login with email and password
    */
-  async loginWithPassword(email: string, password: string): Promise<{ user: User; tokens: { accessToken: string; refreshToken: string } }> {
+  async loginWithPassword(email: string, password: string, fcmToken?: string, deviceInfo?: string): Promise<{ user: User; tokens: { accessToken: string; refreshToken: string }; sessionId: string; previousSessionTerminated: boolean }> {
     const user = await this.userRepository.findOne({
       where: { email },
-      select: ['id', 'email', 'phone', 'password', 'role', 'isActive', 'fullName'],
+      select: ['id', 'email', 'phone', 'password', 'role', 'isActive', 'fullName', 'activeSessionId'],
     });
 
     if (!user || !user.password) {
@@ -259,8 +304,21 @@ export class AuthService {
       throw new AppError('Invalid email or password', 401, 'INVALID_CREDENTIALS');
     }
 
-    // Update last login
+    // Check if there was an existing session
+    const previousSessionId = user.activeSessionId;
+    const previousSessionTerminated = !!previousSessionId;
+
+    // Generate new session ID
+    const sessionId = this.generateSessionId();
+
+    // Update user
     user.lastLoginAt = new Date();
+    user.activeSessionId = sessionId;
+    user.activeDeviceInfo = deviceInfo || 'Unknown Device';
+    
+    if (fcmToken) {
+      user.fcmToken = fcmToken;
+    }
 
     // Generate tokens
     const tokens = this.generateTokens({
@@ -268,16 +326,22 @@ export class AuthService {
       email: user.email,
       phone: user.phone,
       role: user.role,
+      sessionId,
     });
 
     user.refreshToken = tokens.refreshToken;
     await this.userRepository.save(user);
 
+    // Invalidate previous session if exists
+    if (previousSessionId) {
+      await this.invalidateSession(user.id, previousSessionId);
+    }
+
     // Remove sensitive data
     delete (user as any).password;
     delete (user as any).refreshToken;
 
-    return { user, tokens };
+    return { user, tokens, sessionId, previousSessionTerminated };
   }
 
   /**
@@ -285,8 +349,10 @@ export class AuthService {
    */
   async socialLogin(
     provider: AuthProvider,
-    profile: { id: string; email?: string; name: string; phone?: string }
-  ): Promise<{ user: User; tokens: { accessToken: string; refreshToken: string }; isNewUser: boolean }> {
+    profile: { id: string; email?: string; name: string; phone?: string },
+    fcmToken?: string,
+    deviceInfo?: string
+  ): Promise<{ user: User; tokens: { accessToken: string; refreshToken: string }; sessionId: string; isNewUser: boolean }> {
     let user: User | null = null;
     let isNewUser = false;
 
@@ -301,7 +367,6 @@ export class AuthService {
     if (!user && profile.email) {
       user = await this.userRepository.findOne({ where: { email: profile.email } });
       if (user) {
-        // Link social account
         if (provider === AuthProvider.GOOGLE) {
           user.googleId = profile.id;
         } else if (provider === AuthProvider.FACEBOOK) {
@@ -309,6 +374,9 @@ export class AuthService {
         }
       }
     }
+
+    // Generate session ID
+    const sessionId = this.generateSessionId();
 
     // Create new user if not found
     if (!user) {
@@ -321,7 +389,20 @@ export class AuthService {
         googleId: provider === AuthProvider.GOOGLE ? profile.id : undefined,
         facebookId: provider === AuthProvider.FACEBOOK ? profile.id : undefined,
         isEmailVerified: true,
+        activeSessionId: sessionId,
+        activeDeviceInfo: deviceInfo,
+        fcmToken,
       });
+    } else {
+      // Invalidate previous session
+      if (user.activeSessionId) {
+        await this.invalidateSession(user.id, user.activeSessionId);
+      }
+      user.activeSessionId = sessionId;
+      user.activeDeviceInfo = deviceInfo;
+      if (fcmToken) {
+        user.fcmToken = fcmToken;
+      }
     }
 
     user.lastLoginAt = new Date();
@@ -332,6 +413,7 @@ export class AuthService {
       email: user.email,
       phone: user.phone,
       role: user.role,
+      sessionId,
     });
 
     user.refreshToken = tokens.refreshToken;
@@ -341,7 +423,49 @@ export class AuthService {
     delete (user as any).password;
     delete (user as any).refreshToken;
 
-    return { user, tokens, isNewUser };
+    return { user, tokens, sessionId, isNewUser };
+  }
+
+  /**
+   * Validate session - check if session is still active
+   */
+  async validateSession(userId: string, sessionId: string): Promise<boolean> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      select: ['id', 'activeSessionId', 'isActive'],
+    });
+
+    if (!user || !user.isActive) {
+      return false;
+    }
+
+    // Check if session matches
+    if (user.activeSessionId !== sessionId) {
+      logger.info(`Session invalid for user ${userId}: expected ${user.activeSessionId}, got ${sessionId}`);
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Invalidate a specific session (add to blacklist)
+   */
+  private async invalidateSession(userId: string, sessionId: string): Promise<void> {
+    if (redisClient) {
+      // Store invalidated session in Redis (expires in 7 days)
+      await redisClient.setex(`session:invalidated:${sessionId}`, 7 * 24 * 60 * 60, userId);
+    }
+    logger.info(`Session invalidated: ${sessionId} for user ${userId}`);
+  }
+
+  /**
+   * Check if session is invalidated
+   */
+  async isSessionInvalidated(sessionId: string): Promise<boolean> {
+    if (!redisClient) return false;
+    const result = await redisClient.get(`session:invalidated:${sessionId}`);
+    return !!result;
   }
 
   /**
@@ -351,9 +475,15 @@ export class AuthService {
     try {
       const decoded = jwt.verify(refreshToken, config.jwt.refreshSecret) as TokenPayload;
 
+      // Validate session is still active
+      const isValidSession = await this.validateSession(decoded.userId, decoded.sessionId);
+      if (!isValidSession) {
+        throw new AppError('Session has been terminated. Please login again.', 401, 'SESSION_TERMINATED');
+      }
+
       const user = await this.userRepository.findOne({
         where: { id: decoded.userId },
-        select: ['id', 'email', 'phone', 'role', 'refreshToken', 'isActive'],
+        select: ['id', 'email', 'phone', 'role', 'refreshToken', 'isActive', 'activeSessionId'],
       });
 
       if (!user || user.refreshToken !== refreshToken) {
@@ -364,12 +494,13 @@ export class AuthService {
         throw new AppError('Your account has been deactivated', 403, 'ACCOUNT_INACTIVE');
       }
 
-      // Generate new tokens
+      // Generate new tokens with same session ID
       const tokens = this.generateTokens({
         userId: user.id,
         email: user.email,
         phone: user.phone,
         role: user.role,
+        sessionId: user.activeSessionId || decoded.sessionId,
       });
 
       // Update refresh token
@@ -400,8 +531,15 @@ export class AuthService {
       await this.blacklistToken(refreshToken, 'refresh');
     }
 
-    // Clear refresh token from user
-    await this.userRepository.update(userId, { refreshToken: undefined });
+    // Clear refresh token and session from user
+    await this.userRepository.update(userId, { 
+      refreshToken: undefined,
+      activeSessionId: undefined,
+      activeDeviceInfo: undefined,
+      fcmToken: undefined,
+    });
+
+    logger.info(`User logged out: ${userId}`);
   }
 
   /**
@@ -409,6 +547,7 @@ export class AuthService {
    */
   async updateFcmToken(userId: string, fcmToken: string): Promise<void> {
     await this.userRepository.update(userId, { fcmToken });
+    logger.info(`FCM token updated for user: ${userId}`);
   }
 
   /**
@@ -433,7 +572,7 @@ export class AuthService {
     if (!redisClient) return;
 
     const prefix = type === 'refresh' ? 'blacklist:refresh:' : 'blacklist:';
-    const ttl = type === 'refresh' ? 30 * 24 * 60 * 60 : 7 * 24 * 60 * 60; // 30 days or 7 days
+    const ttl = type === 'refresh' ? 30 * 24 * 60 * 60 : 7 * 24 * 60 * 60;
 
     await redisClient.setex(`${prefix}${token}`, ttl, '1');
   }
