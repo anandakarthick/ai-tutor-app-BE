@@ -5,6 +5,7 @@ import { ChatMessage, SenderType, MessageType } from '../entities/ChatMessage';
 import { StudentProgress, MasteryLevel } from '../entities/StudentProgress';
 import { authenticate, AuthRequest } from '../middlewares/auth';
 import { e2eEncryption } from '../middlewares/encryption';
+import { cacheService } from '../config/redis';
 import aiService from '../services/ai.service';
 
 const router = Router();
@@ -174,6 +175,34 @@ router.get('/session/:id/messages', authenticate, async (req: AuthRequest, res: 
 });
 
 /**
+ * @route   GET /api/v1/learning/progress/:studentId/:topicId
+ * @desc    Get topic progress for a student
+ * @access  Private
+ */
+router.get('/progress/:studentId/:topicId', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { studentId, topicId } = req.params;
+    
+    console.log('[learning/progress] Getting progress:', { studentId, topicId });
+
+    const progressRepository = AppDataSource.getRepository(StudentProgress);
+    const progress = await progressRepository.findOne({
+      where: { studentId, topicId },
+    });
+
+    if (!progress) {
+      return res.status(404).json({ success: false, message: 'Progress not found' });
+    }
+
+    console.log('[learning/progress] Found progress:', progress);
+    res.json({ success: true, data: progress });
+  } catch (error) {
+    console.log('[learning/progress] Error:', error);
+    next(error);
+  }
+});
+
+/**
  * @route   PUT /api/v1/learning/progress
  * @desc    Update topic progress
  * @access  Private
@@ -181,6 +210,8 @@ router.get('/session/:id/messages', authenticate, async (req: AuthRequest, res: 
 router.put('/progress', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { studentId, topicId, progressPercentage, masteryLevel } = req.body;
+    
+    console.log('[learning/progress] Updating progress:', { studentId, topicId, progressPercentage, masteryLevel });
 
     const progressRepository = AppDataSource.getRepository(StudentProgress);
     let progress = await progressRepository.findOne({
@@ -188,21 +219,33 @@ router.put('/progress', authenticate, async (req: AuthRequest, res: Response, ne
     });
 
     if (!progress) {
+      console.log('[learning/progress] Creating new progress record');
       progress = progressRepository.create({ studentId, topicId });
     }
 
     progress.progressPercentage = progressPercentage;
+    progress.lastAccessedAt = new Date();
+    
     if (masteryLevel) {
       progress.masteryLevel = masteryLevel as MasteryLevel;
     }
-    if (progressPercentage === 100 && !progress.completedAt) {
+    
+    // Mark as completed if progress is 100%
+    if (Number(progressPercentage) >= 100 && !progress.completedAt) {
       progress.completedAt = new Date();
+      console.log('[learning/progress] Marking topic as completed');
     }
 
     await progressRepository.save(progress);
+    console.log('[learning/progress] Progress saved:', progress);
+
+    // Invalidate progress cache so LearnScreen gets updated data
+    await cacheService.del(`progress:${studentId}:overall`);
+    console.log('[learning/progress] Cache invalidated for student:', studentId);
 
     res.json({ success: true, data: progress });
   } catch (error) {
+    console.log('[learning/progress] Error:', error);
     next(error);
   }
 });

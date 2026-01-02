@@ -47,11 +47,14 @@ router.get('/:studentId', authenticate, async (req: AuthRequest, res: Response, 
         };
       }
 
+      const progressPercent = Number(p.progressPercentage) || 0;
+      
       subjectProgress[subjectId].totalTopics++;
       subjectProgress[subjectId].totalTimeMinutes += p.totalTimeSpentMinutes;
-      subjectProgress[subjectId].avgProgress += p.progressPercentage;
+      subjectProgress[subjectId].avgProgress += progressPercent;
       
-      if (p.progressPercentage === 100) {
+      // Check if completed (100% or has completedAt)
+      if (progressPercent >= 100 || p.completedAt) {
         subjectProgress[subjectId].completedTopics++;
       }
     }
@@ -63,13 +66,13 @@ router.get('/:studentId', authenticate, async (req: AuthRequest, res: Response, 
 
     const result = {
       totalTopics: progress.length,
-      completedTopics: progress.filter(p => p.progressPercentage === 100).length,
+      completedTopics: progress.filter(p => Number(p.progressPercentage) >= 100 || p.completedAt).length,
       totalTimeMinutes: progress.reduce((sum, p) => sum + p.totalTimeSpentMinutes, 0),
       subjectProgress: Object.values(subjectProgress),
     };
 
-    // Cache for 1 hour
-    await cacheService.set(cacheKey, result, 3600);
+    // Cache for 5 minutes only (progress changes frequently)
+    await cacheService.set(cacheKey, result, 300);
 
     res.json({ success: true, data: result });
   } catch (error) {
