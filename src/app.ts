@@ -35,11 +35,18 @@ const app: Application = express();
 // Security middleware
 app.use(helmet());
 
-// CORS configuration
+// CORS configuration - Allow all origins in development for mobile app
 app.use(cors({
-  origin: config.corsOrigins,
+  origin: config.nodeEnv === 'development' ? true : config.corsOrigins,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Encryption-Enabled'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'X-Encryption-Enabled',
+    'X-Client-Public-Key',  // Required for E2E encryption
+  ],
+  exposedHeaders: ['X-Encryption-Enabled'],
   credentials: true,
   maxAge: 86400, // 24 hours
 }));
@@ -101,10 +108,13 @@ app.get('/health', (req: Request, res: Response) => {
 const apiPrefix = `/api/${config.apiVersion}`;
 
 // Apply E2E encryption middleware to all API routes
+// IMPORTANT: encryptResponse must come BEFORE decryptRequest!
 if (config.encryptionEnabled) {
   console.log('🔐 E2E Encryption enabled for all API routes');
-  app.use(apiPrefix, decryptRequest);
-  app.use(apiPrefix, encryptResponse);
+  app.use(apiPrefix, encryptResponse);  // First: setup response encryption
+  app.use(apiPrefix, decryptRequest);   // Second: decrypt request
+} else {
+  console.log('🔓 E2E Encryption disabled');
 }
 
 // API Routes
