@@ -1,6 +1,14 @@
 # AI Tutor Backend API
 
-A comprehensive backend API for an AI-powered online tutoring platform built with Express.js, TypeORM, PostgreSQL, Redis, and RabbitMQ.
+A comprehensive backend API for an AI-powered online tutoring platform built with Express.js, TypeORM, PostgreSQL, Redis, and RabbitMQ. **Supports both Mobile and Web clients.**
+
+## 🎯 Client Support
+
+| Platform | Status | Auth Method |
+|----------|--------|-------------|
+| 📱 iOS | ✅ Supported | JWT (Header) |
+| 📱 Android | ✅ Supported | JWT (Header) |
+| 🌐 Web | ✅ Supported | JWT (Header + Cookie) |
 
 ## Tech Stack
 
@@ -19,8 +27,10 @@ A comprehensive backend API for an AI-powered online tutoring platform built wit
 - 🔐 **Authentication**
   - Phone OTP login
   - Email/Password login
+  - Email OTP login (Web)
   - Google/Facebook OAuth
   - JWT tokens with refresh
+  - Cookie-based sessions (Web)
 
 - 📚 **Learning Management**
   - Multi-board curriculum support (CBSE, ICSE, State Boards)
@@ -50,6 +60,12 @@ A comprehensive backend API for an AI-powered online tutoring platform built wit
   - Multiple plans
   - Razorpay payment integration
   - Coupon system
+
+- 🌐 **Web Support**
+  - Cookie-based authentication
+  - CSRF protection (optional)
+  - SPA fallback routing
+  - WebSocket with cookie auth
 
 ## Prerequisites
 
@@ -131,6 +147,15 @@ JWT_EXPIRES_IN=7d
 JWT_REFRESH_SECRET=your-refresh-secret
 JWT_REFRESH_EXPIRES_IN=30d
 
+# Web Configuration
+WEB_ENABLED=true
+COOKIE_SECRET=your-cookie-secret
+COOKIE_DOMAIN=localhost
+CSRF_ENABLED=false
+
+# CORS (include both mobile and web origins)
+CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:5173,http://localhost:8081
+
 # Claude AI
 ANTHROPIC_API_KEY=your-api-key
 
@@ -147,14 +172,18 @@ RAZORPAY_KEY_SECRET=your-key-secret
 ## API Endpoints
 
 ### Authentication
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | /api/v1/auth/send-otp | Send OTP |
-| POST | /api/v1/auth/verify-otp | Verify OTP |
-| POST | /api/v1/auth/register | Register user |
-| POST | /api/v1/auth/login | Login with OTP |
-| POST | /api/v1/auth/refresh-token | Refresh token |
-| POST | /api/v1/auth/logout | Logout |
+| Method | Endpoint | Description | Clients |
+|--------|----------|-------------|---------|
+| POST | /api/v1/auth/send-otp | Send OTP (phone/email) | All |
+| POST | /api/v1/auth/verify-otp | Verify OTP | All |
+| POST | /api/v1/auth/register | Register user | All |
+| POST | /api/v1/auth/login | Login with OTP | All |
+| POST | /api/v1/auth/login/password | Login with password | All |
+| POST | /api/v1/auth/login/email | Login with email OTP | Web |
+| POST | /api/v1/auth/refresh-token | Refresh token | All |
+| GET | /api/v1/auth/check | Check auth status | Web |
+| GET | /api/v1/auth/me | Get current user | All |
+| POST | /api/v1/auth/logout | Logout | All |
 
 ### Students
 | Method | Endpoint | Description |
@@ -210,6 +239,39 @@ RAZORPAY_KEY_SECRET=your-key-secret
 | GET | /api/v1/dashboard/leaderboard | Get leaderboard |
 | GET | /api/v1/dashboard/achievements | Get achievements |
 
+## Web Integration
+
+For detailed web integration guide, see [docs/WEB_INTEGRATION.md](docs/WEB_INTEGRATION.md).
+
+### Quick Setup for Web Clients
+
+```javascript
+// API Client
+const api = axios.create({
+  baseURL: 'http://localhost:3000/api/v1',
+  withCredentials: true, // Important for cookies!
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Client-Type': 'web'
+  }
+});
+
+// Socket.IO
+const socket = io('http://localhost:3000', {
+  withCredentials: true,
+  transports: ['websocket', 'polling']
+});
+```
+
+### Deploy Web App with Backend
+
+Build your React/Vue/Angular app and copy to `/public`:
+
+```bash
+npm run build
+cp -r build/* /path/to/ai-tutor-app-BE/public/
+```
+
 ## Project Structure
 
 ```
@@ -226,6 +288,8 @@ src/
 ├── entities/            # TypeORM entities
 ├── middlewares/
 │   ├── auth.ts          # Authentication middleware
+│   ├── clientDetection.ts # Client type detection
+│   ├── encryption.ts    # E2E encryption
 │   └── errorHandler.ts  # Error handling
 ├── routes/              # API routes
 ├── services/
@@ -238,6 +302,7 @@ src/
 │   └── helpers.ts
 ├── app.ts               # Express app
 └── server.ts            # Server entry point
+public/                  # Web app static files
 ```
 
 ## Database Migrations
@@ -277,11 +342,16 @@ npm run test         # Run tests
 - `endSession` - End learning session
 - `typing` - Typing indicator
 - `message` - Send chat message
+- `joinDoubt` - Join doubt chat (Web)
+- `joinQuiz` - Join quiz room
+- `setStatus` - Set online status (Web)
 
 ### Server to Client
 - `userTyping` - Typing indicator
 - `newMessage` - New chat message
 - `notification` - Push notification
+- `sessionStarted` - Session started
+- `sessionEnded` - Session ended
 
 ## License
 

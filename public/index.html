@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Tutor - Web App</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+    }
+    .container {
+      text-align: center;
+      padding: 2rem;
+    }
+    h1 {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
+    p {
+      font-size: 1.25rem;
+      opacity: 0.9;
+      margin-bottom: 2rem;
+    }
+    .status {
+      background: rgba(255,255,255,0.2);
+      padding: 1rem 2rem;
+      border-radius: 8px;
+      display: inline-block;
+    }
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin: 0.5rem 0;
+    }
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #4ade80;
+    }
+    a {
+      color: white;
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎓 AI Tutor</h1>
+    <p>Web Application Placeholder</p>
+    <div class="status">
+      <div class="status-item">
+        <span class="dot"></span>
+        <span>API Server: Running</span>
+      </div>
+      <div class="status-item">
+        <span class="dot"></span>
+        <span>WebSocket: Connected</span>
+      </div>
+      <div class="status-item">
+        <span class="dot"></span>
+        <span>Web Support: Enabled</span>
+      </div>
+    </div>
+    <p style="margin-top: 2rem; font-size: 1rem;">
+      Build your web app and place the build files here.<br>
+      <a href="/health">Check API Health</a> | 
+      <a href="/api/v1">API Endpoints</a>
+    </p>
+  </div>
+</body>
+</html>

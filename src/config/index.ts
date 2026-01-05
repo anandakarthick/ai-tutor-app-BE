@@ -86,7 +86,29 @@ export const config = {
   rateLimitMaxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100', 10),
 
   // CORS
-  corsOrigins: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3000', 'http://localhost:8081'],
+  corsOrigins: process.env.CORS_ORIGINS?.split(',') || [
+    'http://localhost:3000',
+    'http://localhost:3001', // Web app dev
+    'http://localhost:5173', // Vite dev
+    'http://localhost:8080', // Alternative web
+    'http://localhost:8081', // React Native
+  ],
+
+  // Web App Configuration
+  web: {
+    enabled: process.env.WEB_ENABLED !== 'false', // Enable by default
+    cookieSecret: process.env.COOKIE_SECRET || 'your-cookie-secret-change-in-production',
+    cookieDomain: process.env.COOKIE_DOMAIN || 'localhost',
+    cookieSecure: process.env.NODE_ENV === 'production', // HTTPS only in production
+    cookieMaxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    csrfEnabled: process.env.CSRF_ENABLED === 'true', // Enable CSRF protection for web
+  },
+
+  // Client Type Detection
+  clients: {
+    mobile: ['ios', 'android', 'react-native'],
+    web: ['web', 'browser'],
+  },
 
   // Logging
   logLevel: process.env.LOG_LEVEL || 'debug',
