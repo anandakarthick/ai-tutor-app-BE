@@ -7,6 +7,7 @@ import { authenticate, AuthRequest } from '../middlewares/auth';
 import { e2eEncryption } from '../middlewares/encryption';
 import { cacheService } from '../config/redis';
 import aiService from '../services/ai.service';
+import speechService from '../services/speech.service';
 
 const router = Router();
 
@@ -289,6 +290,168 @@ router.post('/teach', authenticate, async (req: AuthRequest, res: Response, next
     console.log('[learning/teach] Error:', error);
     res.write(`data: ${JSON.stringify({ error: 'Teaching stream failed' })}\n\n`);
     res.end();
+  }
+});
+
+/**
+ * @route   POST /api/v1/learning/tts
+ * @desc    Convert text to speech
+ * @access  Private
+ */
+router.post('/tts', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { text, language = 'en-IN' } = req.body;
+    
+    if (!text) {
+      return res.status(400).json({ success: false, message: 'Text is required' });
+    }
+
+    console.log('[learning/tts] Converting text to speech:', text.substring(0, 50));
+
+    const audioBase64 = await speechService.textToSpeech(text, language);
+    
+    if (!audioBase64) {
+      return res.status(500).json({ success: false, message: 'TTS conversion failed' });
+    }
+
+    res.json({ 
+      success: true, 
+      data: { 
+        audio: audioBase64,
+        format: 'mp3',
+        language 
+      } 
+    });
+  } catch (error) {
+    console.log('[learning/tts] Error:', error);
+    next(error);
+  }
+});
+
+/**
+ * @route   POST /api/v1/learning/tts/chunks
+ * @desc    Convert long text to speech in chunks (for teaching)
+ * @access  Private
+ */
+router.post('/tts/chunks', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { text, language = 'en-IN' } = req.body;
+    
+    if (!text) {
+      return res.status(400).json({ success: false, message: 'Text is required' });
+    }
+
+    console.log('[learning/tts/chunks] Converting text chunks to speech');
+
+    const audioChunks = await speechService.textToSpeechChunks(text, language);
+    
+    res.json({ 
+      success: true, 
+      data: { 
+        chunks: audioChunks,
+        count: audioChunks.length,
+        format: 'mp3',
+        language 
+      } 
+    });
+  } catch (error) {
+    console.log('[learning/tts/chunks] Error:', error);
+    next(error);
+  }
+});
+
+/**
+ * @route   POST /api/v1/learning/voice-message
+ * @desc    Send voice message - converts to text and gets AI response with audio
+ * @access  Private
+ */
+router.post('/voice-message', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { sessionId, audioBase64, transcription } = req.body;
+    
+    if (!sessionId) {
+      return res.status(400).json({ success: false, message: 'Session ID is required' });
+    }
+
+    // If transcription is provided directly (from client-side STT), use it
+    // Otherwise, we would convert audio to text here
+    let messageText = transcription || '';
+    
+    if (!messageText && audioBase64) {
+      // In production, call speech-to-text service here
+      // For now, we'll require client to send transcription
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Transcription required. Use device speech-to-text.' 
+      });
+    }
+
+    if (!messageText) {
+      return res.status(400).json({ success: false, message: 'No message content' });
+    }
+
+    console.log('[learning/voice-message] Processing voice message:', messageText.substring(0, 50));
+
+    // Get session with relations
+    const sessionRepository = AppDataSource.getRepository(LearningSession);
+    const session = await sessionRepository.findOne({
+      where: { id: sessionId },
+      relations: ['topic', 'topic.chapter', 'topic.chapter.book', 'topic.chapter.book.subject', 'student'],
+    });
+
+    if (!session) {
+      return res.status(404).json({ success: false, message: 'Session not found' });
+    }
+
+    const messageRepository = AppDataSource.getRepository(ChatMessage);
+
+    // Save user message
+    const userMessage = messageRepository.create({
+      sessionId,
+      senderType: SenderType.STUDENT,
+      messageType: MessageType.VOICE,
+      content: messageText,
+    });
+    await messageRepository.save(userMessage);
+
+    // Get AI response
+    const aiResponse = await aiService.conductTeachingSession({
+      studentName: session.student?.studentName || 'Student',
+      grade: session.topic?.chapter?.book?.subject?.class?.displayName || 'Student',
+      subject: session.topic?.chapter?.book?.subject?.displayName || 'Subject',
+      topic: session.topic?.topicTitle || 'Topic',
+      content: messageText,
+    });
+
+    // Save AI message
+    const aiMessage = messageRepository.create({
+      sessionId,
+      senderType: SenderType.AI,
+      messageType: MessageType.EXPLANATION,
+      content: aiResponse,
+    });
+    await messageRepository.save(aiMessage);
+
+    // Convert AI response to speech
+    const audioBase64Response = await speechService.textToSpeech(aiResponse, 'en-IN');
+
+    // Update session stats
+    await sessionRepository.update(sessionId, {
+      aiInteractions: () => 'ai_interactions + 1',
+    });
+
+    res.json({
+      success: true,
+      data: {
+        userMessage,
+        aiMessage,
+        aiAudio: audioBase64Response,
+        audioFormat: 'mp3',
+      },
+    });
+  } catch (error) {
+    console.log('[learning/voice-message] Error:', error);
+    next(error);
   }
 });
 
