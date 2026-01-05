@@ -4,7 +4,7 @@ import { Student } from '../entities/Student';
 import { StudentProgress } from '../entities/StudentProgress';
 import { DailyProgress } from '../entities/DailyProgress';
 import { LearningSession } from '../entities/LearningSession';
-import { QuizAttempt } from '../entities/QuizAttempt';
+import { QuizAttempt, AttemptStatus } from '../entities/QuizAttempt';
 import { StudyPlan, PlanStatus } from '../entities/StudyPlan';
 import { StudyPlanItem } from '../entities/StudyPlanItem';
 import { Achievement } from '../entities/Achievement';
@@ -27,14 +27,17 @@ router.get('/stats', authenticate, async (req: AuthRequest, res: Response, next:
       return res.status(400).json({ success: false, message: 'Student ID is required' });
     }
 
-    // Check cache
+    console.log(`[Dashboard API] Getting stats for student: ${studentId}`);
+
+    // Check cache - short TTL for dashboard
     const cacheKey = `dashboard:stats:${studentId}`;
     const cached = await cacheService.get(cacheKey);
     if (cached) {
+      console.log(`[Dashboard API] Returning cached stats`);
       return res.json({ success: true, data: cached, cached: true });
     }
 
-    // Get student
+    // Get student with all relevant info
     const studentRepository = AppDataSource.getRepository(Student);
     const student = await studentRepository.findOne({
       where: { id: studentId as string },
@@ -53,24 +56,34 @@ router.get('/stats', authenticate, async (req: AuthRequest, res: Response, next:
       where: { studentId: studentId as string, date: today },
     });
 
+    console.log(`[Dashboard API] Today's progress:`, todayProgress);
+
     // Get total topics progress
     const progressRepository = AppDataSource.getRepository(StudentProgress);
     const progressCount = await progressRepository
       .createQueryBuilder('p')
       .where('p.student_id = :studentId', { studentId })
       .select('COUNT(*)', 'total')
-      .addSelect('SUM(CASE WHEN p.progress_percentage = 100 THEN 1 ELSE 0 END)', 'completed')
+      .addSelect('SUM(CASE WHEN p.progress_percentage >= 100 OR p.completed_at IS NOT NULL THEN 1 ELSE 0 END)', 'completed')
       .getRawOne();
 
-    // Get quiz stats
+    console.log(`[Dashboard API] Progress count:`, progressCount);
+
+    // Get quiz stats - Count only SUBMITTED or EVALUATED attempts
     const quizRepository = AppDataSource.getRepository(QuizAttempt);
     const quizStats = await quizRepository
       .createQueryBuilder('q')
       .where('q.student_id = :studentId', { studentId })
+      .andWhere('q.status IN (:...statuses)', { 
+        statuses: [AttemptStatus.SUBMITTED, AttemptStatus.EVALUATED] 
+      })
       .select('COUNT(*)', 'total')
       .addSelect('AVG(q.percentage)', 'avgScore')
-      .addSelect('SUM(CASE WHEN q.is_passed THEN 1 ELSE 0 END)', 'passed')
+      .addSelect('MAX(q.percentage)', 'bestScore')
+      .addSelect('SUM(CASE WHEN q.is_passed = true THEN 1 ELSE 0 END)', 'passed')
       .getRawOne();
+
+    console.log(`[Dashboard API] Quiz stats:`, quizStats);
 
     // Get achievements count
     const achievementRepository = AppDataSource.getRepository(StudentAchievement);
@@ -81,9 +94,9 @@ router.get('/stats', authenticate, async (req: AuthRequest, res: Response, next:
     const stats = {
       student: {
         name: student.studentName,
-        xp: student.xp,
-        level: student.level,
-        streakDays: student.streakDays,
+        xp: student.xp || 0,
+        level: student.level || 1,
+        streakDays: student.streakDays || 0,
       },
       today: {
         studyTimeMinutes: todayProgress?.totalStudyTimeMinutes || 0,
@@ -95,17 +108,21 @@ router.get('/stats', authenticate, async (req: AuthRequest, res: Response, next:
         totalTopics: parseInt(progressCount?.total || '0'),
         completedTopics: parseInt(progressCount?.completed || '0'),
         totalQuizzes: parseInt(quizStats?.total || '0'),
-        avgQuizScore: parseFloat(quizStats?.avgScore || '0'),
+        avgQuizScore: Math.round(parseFloat(quizStats?.avgScore || '0') * 100) / 100,
+        bestQuizScore: Math.round(parseFloat(quizStats?.bestScore || '0') * 100) / 100,
         quizzesPassed: parseInt(quizStats?.passed || '0'),
         achievements: achievementsCount,
       },
     };
 
-    // Cache for 5 minutes
-    await cacheService.set(cacheKey, stats, 300);
+    console.log(`[Dashboard API] Final stats:`, JSON.stringify(stats, null, 2));
+
+    // Cache for 2 minutes
+    await cacheService.set(cacheKey, stats, 120);
 
     res.json({ success: true, data: stats });
   } catch (error) {
+    console.error('[Dashboard API] Stats error:', error);
     next(error);
   }
 });
@@ -122,6 +139,8 @@ router.get('/today', authenticate, async (req: AuthRequest, res: Response, next:
     if (!studentId) {
       return res.status(400).json({ success: false, message: 'Student ID is required' });
     }
+
+    console.log(`[Dashboard API] Getting today's plan for student: ${studentId}`);
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -167,6 +186,7 @@ router.get('/today', authenticate, async (req: AuthRequest, res: Response, next:
       },
     });
   } catch (error) {
+    console.error('[Dashboard API] Today error:', error);
     next(error);
   }
 });
@@ -180,11 +200,14 @@ router.get('/leaderboard', authenticate, async (req: AuthRequest, res: Response,
   try {
     const { classId, type = 'weekly', limit = 10 } = req.query;
 
+    console.log(`[Dashboard API] Getting leaderboard, classId: ${classId}, type: ${type}`);
+
     // Try cache first
     const cacheKey = `leaderboard:${classId || 'global'}:${type}`;
     const cached = await cacheService.zrevrangeWithScores(cacheKey, 0, Number(limit) - 1);
     
     if (cached && cached.length > 0) {
+      console.log(`[Dashboard API] Returning cached leaderboard`);
       return res.json({ success: true, data: cached, cached: true });
     }
 
@@ -207,14 +230,17 @@ router.get('/leaderboard', authenticate, async (req: AuthRequest, res: Response,
       rank: index + 1,
       studentId: s.id,
       name: s.studentName,
-      xp: s.xp,
-      level: s.level,
-      streak: s.streakDays,
+      xp: s.xp || 0,
+      level: s.level || 1,
+      streak: s.streakDays || 0,
       avatar: s.profileImageUrl,
     }));
 
+    console.log(`[Dashboard API] Leaderboard:`, leaderboard.length, 'students');
+
     res.json({ success: true, data: leaderboard });
   } catch (error) {
+    console.error('[Dashboard API] Leaderboard error:', error);
     next(error);
   }
 });
@@ -231,6 +257,8 @@ router.get('/achievements', authenticate, async (req: AuthRequest, res: Response
     if (!studentId) {
       return res.status(400).json({ success: false, message: 'Student ID is required' });
     }
+
+    console.log(`[Dashboard API] Getting achievements for student: ${studentId}`);
 
     // Get earned achievements
     const studentAchievementRepository = AppDataSource.getRepository(StudentAchievement);
@@ -263,6 +291,7 @@ router.get('/achievements', authenticate, async (req: AuthRequest, res: Response
       },
     });
   } catch (error) {
+    console.error('[Dashboard API] Achievements error:', error);
     next(error);
   }
 });

@@ -3,6 +3,8 @@ import AppDataSource from '../config/database';
 import { LearningSession, SessionStatus } from '../entities/LearningSession';
 import { ChatMessage, SenderType, MessageType } from '../entities/ChatMessage';
 import { StudentProgress, MasteryLevel } from '../entities/StudentProgress';
+import { DailyProgress } from '../entities/DailyProgress';
+import { Student } from '../entities/Student';
 import { authenticate, AuthRequest } from '../middlewares/auth';
 import { e2eEncryption } from '../middlewares/encryption';
 import { cacheService } from '../config/redis';
@@ -10,6 +12,66 @@ import aiService from '../services/ai.service';
 import speechService from '../services/speech.service';
 
 const router = Router();
+
+/**
+ * Helper function to update daily progress
+ */
+async function updateDailyProgress(
+  studentId: string, 
+  studyTimeMinutes: number = 0, 
+  topicsCompleted: number = 0,
+  xpEarned: number = 0
+) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const dailyRepository = AppDataSource.getRepository(DailyProgress);
+  let daily = await dailyRepository.findOne({
+    where: { studentId, date: today },
+  });
+
+  if (!daily) {
+    // Get previous streak
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    const yesterdayProgress = await dailyRepository.findOne({
+      where: { studentId, date: yesterday },
+    });
+
+    daily = dailyRepository.create({
+      studentId,
+      date: today,
+      streakDays: yesterdayProgress ? yesterdayProgress.streakDays + 1 : 1,
+      totalStudyTimeMinutes: 0,
+      topicsCompleted: 0,
+      quizzesAttempted: 0,
+      doubtsAsked: 0,
+      xpEarned: 0,
+    });
+  }
+
+  daily.totalStudyTimeMinutes += studyTimeMinutes;
+  daily.topicsCompleted += topicsCompleted;
+  daily.xpEarned += xpEarned;
+  
+  await dailyRepository.save(daily);
+
+  // Update student streak and lastActivityDate
+  const studentRepository = AppDataSource.getRepository(Student);
+  await studentRepository.update(studentId, {
+    streakDays: daily.streakDays,
+    lastActivityDate: today,
+  });
+
+  console.log(`[DailyProgress] Updated for student ${studentId}: +${studyTimeMinutes}min, +${topicsCompleted} topics, +${xpEarned}xp`);
+
+  // Invalidate cache
+  await cacheService.del(`progress:${studentId}:overall`);
+  await cacheService.del(`dashboard:stats:${studentId}`);
+
+  return daily;
+}
 
 /**
  * @route   POST /api/v1/learning/session
@@ -56,6 +118,7 @@ router.put('/session/:id/end', authenticate, async (req: AuthRequest, res: Respo
 
     const endedAt = new Date();
     const durationSeconds = Math.floor((endedAt.getTime() - session.startedAt!.getTime()) / 1000);
+    const durationMinutes = Math.ceil(durationSeconds / 60);
 
     await sessionRepository.update(id, {
       status: SessionStatus.COMPLETED,
@@ -64,7 +127,7 @@ router.put('/session/:id/end', authenticate, async (req: AuthRequest, res: Respo
       xpEarned,
     });
 
-    // Update student progress
+    // Update student progress for the topic
     const progressRepository = AppDataSource.getRepository(StudentProgress);
     let progress = await progressRepository.findOne({
       where: { studentId: session.studentId, topicId: session.topicId },
@@ -77,11 +140,16 @@ router.put('/session/:id/end', authenticate, async (req: AuthRequest, res: Respo
       });
     }
 
-    progress.totalTimeSpentMinutes += Math.ceil(durationSeconds / 60);
+    progress.totalTimeSpentMinutes += durationMinutes;
     progress.lastAccessedAt = new Date();
     await progressRepository.save(progress);
 
-    res.json({ success: true, message: 'Session ended', data: { durationSeconds } });
+    // Update daily progress
+    await updateDailyProgress(session.studentId, durationMinutes, 0, xpEarned);
+
+    console.log(`[Session End] Student ${session.studentId}: ${durationMinutes}min, ${xpEarned}xp`);
+
+    res.json({ success: true, message: 'Session ended', data: { durationSeconds, durationMinutes } });
   } catch (error) {
     next(error);
   }
@@ -219,6 +287,8 @@ router.put('/progress', authenticate, async (req: AuthRequest, res: Response, ne
       where: { studentId, topicId },
     });
 
+    const wasCompleted = progress?.completedAt != null;
+
     if (!progress) {
       console.log('[learning/progress] Creating new progress record');
       progress = progressRepository.create({ studentId, topicId });
@@ -232,16 +302,25 @@ router.put('/progress', authenticate, async (req: AuthRequest, res: Response, ne
     }
     
     // Mark as completed if progress is 100%
+    let topicJustCompleted = false;
     if (Number(progressPercentage) >= 100 && !progress.completedAt) {
       progress.completedAt = new Date();
+      topicJustCompleted = true;
       console.log('[learning/progress] Marking topic as completed');
     }
 
     await progressRepository.save(progress);
     console.log('[learning/progress] Progress saved:', progress);
 
+    // Update daily progress if topic just completed
+    if (topicJustCompleted && !wasCompleted) {
+      await updateDailyProgress(studentId, 0, 1, 10); // 10 XP for completing a topic
+      console.log('[learning/progress] Daily progress updated for topic completion');
+    }
+
     // Invalidate progress cache so LearnScreen gets updated data
     await cacheService.del(`progress:${studentId}:overall`);
+    await cacheService.del(`dashboard:stats:${studentId}`);
     console.log('[learning/progress] Cache invalidated for student:', studentId);
 
     res.json({ success: true, data: progress });

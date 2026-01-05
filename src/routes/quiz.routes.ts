@@ -4,9 +4,75 @@ import { Quiz } from '../entities/Quiz';
 import { Question } from '../entities/Question';
 import { QuizAttempt, AttemptStatus } from '../entities/QuizAttempt';
 import { AnswerResponse } from '../entities/AnswerResponse';
+import { DailyProgress } from '../entities/DailyProgress';
+import { Student } from '../entities/Student';
 import { authenticate, AuthRequest } from '../middlewares/auth';
+import { cacheService } from '../config/redis';
 
 const router = Router();
+
+/**
+ * Helper function to update daily progress
+ */
+async function updateDailyProgress(
+  studentId: string, 
+  studyTimeMinutes: number = 0, 
+  topicsCompleted: number = 0,
+  quizzesAttempted: number = 0,
+  xpEarned: number = 0
+) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const dailyRepository = AppDataSource.getRepository(DailyProgress);
+  let daily = await dailyRepository.findOne({
+    where: { studentId, date: today },
+  });
+
+  if (!daily) {
+    // Get previous streak
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    const yesterdayProgress = await dailyRepository.findOne({
+      where: { studentId, date: yesterday },
+    });
+
+    daily = dailyRepository.create({
+      studentId,
+      date: today,
+      streakDays: yesterdayProgress ? yesterdayProgress.streakDays + 1 : 1,
+      totalStudyTimeMinutes: 0,
+      topicsCompleted: 0,
+      quizzesAttempted: 0,
+      doubtsAsked: 0,
+      xpEarned: 0,
+    });
+  }
+
+  daily.totalStudyTimeMinutes += studyTimeMinutes;
+  daily.topicsCompleted += topicsCompleted;
+  daily.quizzesAttempted += quizzesAttempted;
+  daily.xpEarned += xpEarned;
+  
+  await dailyRepository.save(daily);
+
+  // Update student streak, lastActivityDate, and XP
+  const studentRepository = AppDataSource.getRepository(Student);
+  await studentRepository.increment({ id: studentId }, 'xp', xpEarned);
+  await studentRepository.update(studentId, {
+    streakDays: daily.streakDays,
+    lastActivityDate: today,
+  });
+
+  console.log(`[DailyProgress] Updated for student ${studentId}: quiz +${quizzesAttempted}, +${xpEarned}xp`);
+
+  // Invalidate cache
+  await cacheService.del(`progress:${studentId}:overall`);
+  await cacheService.del(`dashboard:stats:${studentId}`);
+
+  return daily;
+}
 
 /**
  * @route   GET /api/v1/quizzes
@@ -16,6 +82,8 @@ const router = Router();
 router.get('/', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { topicId, quizType } = req.query;
+
+    console.log(`[Quizzes API] Getting quizzes, topicId: ${topicId}, quizType: ${quizType}`);
 
     const quizRepository = AppDataSource.getRepository(Quiz);
     const query: any = { isActive: true };
@@ -28,8 +96,11 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response, next: Next
       order: { createdAt: 'DESC' },
     });
 
+    console.log(`[Quizzes API] Found ${quizzes.length} quizzes`);
+
     res.json({ success: true, data: quizzes });
   } catch (error) {
+    console.error('[Quizzes API] Error:', error);
     next(error);
   }
 });
@@ -42,6 +113,8 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response, next: Next
 router.get('/:id', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
+
+    console.log(`[Quizzes API] Getting quiz: ${id}`);
 
     const quizRepository = AppDataSource.getRepository(Quiz);
     const quiz = await quizRepository.findOne({
@@ -65,8 +138,11 @@ router.get('/:id', authenticate, async (req: AuthRequest, res: Response, next: N
       explanation: undefined,
     })) as Question[];
 
+    console.log(`[Quizzes API] Quiz found with ${quiz.questions?.length || 0} questions`);
+
     res.json({ success: true, data: quiz });
   } catch (error) {
+    console.error('[Quizzes API] Error:', error);
     next(error);
   }
 });
@@ -80,6 +156,8 @@ router.post('/:id/attempt', authenticate, async (req: AuthRequest, res: Response
   try {
     const { id } = req.params;
     const { studentId } = req.body;
+
+    console.log(`[Quizzes API] Starting attempt for quiz: ${id}, student: ${studentId}`);
 
     const quizRepository = AppDataSource.getRepository(Quiz);
     const quiz = await quizRepository.findOne({ where: { id } });
@@ -100,8 +178,11 @@ router.post('/:id/attempt', authenticate, async (req: AuthRequest, res: Response
 
     await attemptRepository.save(attempt);
 
+    console.log(`[Quizzes API] Attempt created: ${attempt.id}`);
+
     res.status(201).json({ success: true, data: attempt });
   } catch (error) {
+    console.error('[Quizzes API] Error:', error);
     next(error);
   }
 });
@@ -116,6 +197,8 @@ router.post('/attempts/:attemptId/answer', authenticate, async (req: AuthRequest
     const { attemptId } = req.params;
     const { questionId, studentAnswer, timeTaken = 0 } = req.body;
 
+    console.log(`[Quizzes API] Submitting answer for attempt: ${attemptId}, question: ${questionId}`);
+
     const questionRepository = AppDataSource.getRepository(Question);
     const question = await questionRepository.findOne({ where: { id: questionId } });
 
@@ -127,19 +210,37 @@ router.post('/attempts/:attemptId/answer', authenticate, async (req: AuthRequest
     const marksObtained = isCorrect ? question.marks : (question.negativeMarks ? -question.negativeMarks : 0);
 
     const responseRepository = AppDataSource.getRepository(AnswerResponse);
-    const response = responseRepository.create({
-      attemptId,
-      questionId,
-      studentAnswer,
-      isCorrect,
-      marksObtained,
-      timeTakenSeconds: timeTaken,
+    
+    // Check if answer already exists
+    let response = await responseRepository.findOne({
+      where: { attemptId, questionId },
     });
+    
+    if (response) {
+      // Update existing answer
+      response.studentAnswer = studentAnswer;
+      response.isCorrect = isCorrect;
+      response.marksObtained = marksObtained;
+      response.timeTakenSeconds = timeTaken;
+    } else {
+      // Create new answer
+      response = responseRepository.create({
+        attemptId,
+        questionId,
+        studentAnswer,
+        isCorrect,
+        marksObtained,
+        timeTakenSeconds: timeTaken,
+      });
+    }
 
     await responseRepository.save(response);
 
+    console.log(`[Quizzes API] Answer saved, correct: ${isCorrect}`);
+
     res.json({ success: true, data: response });
   } catch (error) {
+    console.error('[Quizzes API] Error:', error);
     next(error);
   }
 });
@@ -153,9 +254,10 @@ router.put('/attempts/:attemptId/submit', authenticate, async (req: AuthRequest,
   try {
     const { attemptId } = req.params;
 
+    console.log(`[Quizzes API] Submitting attempt: ${attemptId}`);
+
     const attemptRepository = AppDataSource.getRepository(QuizAttempt);
     const responseRepository = AppDataSource.getRepository(AnswerResponse);
-    const quizRepository = AppDataSource.getRepository(Quiz);
 
     const attempt = await attemptRepository.findOne({
       where: { id: attemptId },
@@ -173,11 +275,15 @@ router.put('/attempts/:attemptId/submit', authenticate, async (req: AuthRequest,
     const wrongAnswers = responses.filter(r => !r.isCorrect && !r.isSkipped).length;
     const marksObtained = responses.reduce((sum, r) => sum + Number(r.marksObtained), 0);
     const totalTimeTaken = responses.reduce((sum, r) => sum + r.timeTakenSeconds, 0);
-    const percentage = (marksObtained / Number(attempt.totalMarks)) * 100;
+    const percentage = attempt.totalMarks > 0 
+      ? (marksObtained / Number(attempt.totalMarks)) * 100 
+      : 0;
     const isPassed = percentage >= Number(attempt.quiz?.passingPercentage || 40);
 
     // Calculate XP earned
     const xpEarned = Math.floor(correctAnswers * 10 + (isPassed ? 50 : 0));
+
+    console.log(`[Quizzes API] Results: correct=${correctAnswers}, wrong=${wrongAnswers}, percentage=${percentage.toFixed(2)}%, passed=${isPassed}, xp=${xpEarned}`);
 
     await attemptRepository.update(attemptId, {
       status: AttemptStatus.SUBMITTED,
@@ -186,19 +292,25 @@ router.put('/attempts/:attemptId/submit', authenticate, async (req: AuthRequest,
       correctAnswers,
       wrongAnswers,
       marksObtained,
-      percentage,
+      percentage: Math.round(percentage * 100) / 100,
       timeTakenSeconds: totalTimeTaken,
       isPassed,
       xpEarned,
     });
+
+    // Update daily progress
+    await updateDailyProgress(attempt.studentId, 0, 0, 1, xpEarned);
 
     const updatedAttempt = await attemptRepository.findOne({
       where: { id: attemptId },
       relations: ['responses', 'quiz'],
     });
 
+    console.log(`[Quizzes API] Attempt submitted successfully`);
+
     res.json({ success: true, data: updatedAttempt });
   } catch (error) {
+    console.error('[Quizzes API] Error:', error);
     next(error);
   }
 });
