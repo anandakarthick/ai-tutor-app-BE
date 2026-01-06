@@ -22,6 +22,11 @@ async function updateDailyProgress(
   topicsCompleted: number = 0,
   xpEarned: number = 0
 ) {
+  // Ensure all values are valid numbers
+  const validStudyTime = isNaN(Number(studyTimeMinutes)) ? 0 : Math.max(0, Number(studyTimeMinutes));
+  const validTopicsCompleted = isNaN(Number(topicsCompleted)) ? 0 : Math.max(0, Number(topicsCompleted));
+  const validXpEarned = isNaN(Number(xpEarned)) ? 0 : Math.max(0, Number(xpEarned));
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -51,9 +56,14 @@ async function updateDailyProgress(
     });
   }
 
-  daily.totalStudyTimeMinutes += studyTimeMinutes;
-  daily.topicsCompleted += topicsCompleted;
-  daily.xpEarned += xpEarned;
+  // Ensure existing values are valid before adding
+  const currentStudyTime = isNaN(Number(daily.totalStudyTimeMinutes)) ? 0 : Number(daily.totalStudyTimeMinutes);
+  const currentTopics = isNaN(Number(daily.topicsCompleted)) ? 0 : Number(daily.topicsCompleted);
+  const currentXp = isNaN(Number(daily.xpEarned)) ? 0 : Number(daily.xpEarned);
+
+  daily.totalStudyTimeMinutes = currentStudyTime + validStudyTime;
+  daily.topicsCompleted = currentTopics + validTopicsCompleted;
+  daily.xpEarned = currentXp + validXpEarned;
   
   await dailyRepository.save(daily);
 
@@ -64,7 +74,7 @@ async function updateDailyProgress(
     lastActivityDate: today,
   });
 
-  console.log(`[DailyProgress] Updated for student ${studentId}: +${studyTimeMinutes}min, +${topicsCompleted} topics, +${xpEarned}xp`);
+  console.log(`[DailyProgress] Updated for student ${studentId}: +${validStudyTime}min, +${validTopicsCompleted} topics, +${validXpEarned}xp`);
 
   // Invalidate cache
   await cacheService.del(`progress:${studentId}:overall`);
@@ -117,14 +127,18 @@ router.put('/session/:id/end', authenticate, async (req: AuthRequest, res: Respo
     }
 
     const endedAt = new Date();
-    const durationSeconds = Math.floor((endedAt.getTime() - session.startedAt!.getTime()) / 1000);
-    const durationMinutes = Math.ceil(durationSeconds / 60);
+    const startTime = session.startedAt ? new Date(session.startedAt).getTime() : endedAt.getTime();
+    const durationSeconds = Math.max(0, Math.floor((endedAt.getTime() - startTime) / 1000));
+    const durationMinutes = Math.max(1, Math.ceil(durationSeconds / 60)); // At least 1 minute
+    
+    // Ensure xpEarned is a valid number
+    const validXpEarned = isNaN(Number(xpEarned)) ? 0 : Number(xpEarned);
 
     await sessionRepository.update(id, {
       status: SessionStatus.COMPLETED,
       endedAt,
       durationSeconds,
-      xpEarned,
+      xpEarned: validXpEarned,
     });
 
     // Update student progress for the topic
@@ -137,17 +151,20 @@ router.put('/session/:id/end', authenticate, async (req: AuthRequest, res: Respo
       progress = progressRepository.create({
         studentId: session.studentId,
         topicId: session.topicId,
+        totalTimeSpentMinutes: 0,
       });
     }
 
-    progress.totalTimeSpentMinutes += durationMinutes;
+    // Ensure totalTimeSpentMinutes is a valid number before adding
+    const currentTime = isNaN(Number(progress.totalTimeSpentMinutes)) ? 0 : Number(progress.totalTimeSpentMinutes);
+    progress.totalTimeSpentMinutes = currentTime + durationMinutes;
     progress.lastAccessedAt = new Date();
     await progressRepository.save(progress);
 
     // Update daily progress
-    await updateDailyProgress(session.studentId, durationMinutes, 0, xpEarned);
+    await updateDailyProgress(session.studentId, durationMinutes, 0, validXpEarned);
 
-    console.log(`[Session End] Student ${session.studentId}: ${durationMinutes}min, ${xpEarned}xp`);
+    console.log(`[Session End] Student ${session.studentId}: ${durationMinutes}min, ${validXpEarned}xp`);
 
     res.json({ success: true, message: 'Session ended', data: { durationSeconds, durationMinutes } });
   } catch (error) {
@@ -288,6 +305,15 @@ router.put('/progress', authenticate, async (req: AuthRequest, res: Response, ne
     
     console.log('[learning/progress] Updating progress:', { studentId, topicId, progressPercentage, masteryLevel });
 
+    // Validate required fields
+    if (!studentId || !topicId) {
+      return res.status(400).json({ success: false, message: 'studentId and topicId are required' });
+    }
+
+    // Ensure progressPercentage is a valid number
+    const validProgressPercentage = isNaN(Number(progressPercentage)) ? 0 : Math.min(100, Math.max(0, Number(progressPercentage)));
+    console.log('[learning/progress] Valid progress percentage:', validProgressPercentage);
+
     const progressRepository = AppDataSource.getRepository(StudentProgress);
     let progress = await progressRepository.findOne({
       where: { studentId, topicId },
@@ -297,10 +323,15 @@ router.put('/progress', authenticate, async (req: AuthRequest, res: Response, ne
 
     if (!progress) {
       console.log('[learning/progress] Creating new progress record');
-      progress = progressRepository.create({ studentId, topicId });
+      progress = progressRepository.create({ 
+        studentId, 
+        topicId,
+        progressPercentage: 0,
+        totalTimeSpentMinutes: 0,
+      });
     }
 
-    progress.progressPercentage = progressPercentage;
+    progress.progressPercentage = validProgressPercentage;
     progress.lastAccessedAt = new Date();
     
     if (masteryLevel) {
@@ -309,7 +340,7 @@ router.put('/progress', authenticate, async (req: AuthRequest, res: Response, ne
     
     // Mark as completed if progress is 100%
     let topicJustCompleted = false;
-    if (Number(progressPercentage) >= 100 && !progress.completedAt) {
+    if (validProgressPercentage >= 100 && !progress.completedAt) {
       progress.completedAt = new Date();
       topicJustCompleted = true;
       console.log('[learning/progress] Marking topic as completed');
