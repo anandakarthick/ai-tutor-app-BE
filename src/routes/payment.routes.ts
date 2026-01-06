@@ -3,6 +3,8 @@ import Razorpay from 'razorpay';
 import crypto from 'crypto';
 import AppDataSource from '../config/database';
 import { Payment, PaymentStatus, PaymentGateway } from '../entities/Payment';
+import { SubscriptionPlan } from '../entities/SubscriptionPlan';
+import { UserSubscription, SubscriptionStatus } from '../entities/UserSubscription';
 import { authenticate, AuthRequest } from '../middlewares/auth';
 import { config } from '../config';
 import { AppError } from '../middlewares/errorHandler';
@@ -11,33 +13,49 @@ const router = Router();
 
 // Initialize Razorpay
 const razorpay = new Razorpay({
-  key_id: config.razorpay.keyId,
-  key_secret: config.razorpay.keySecret,
+  key_id: config.razorpay.keyId || 'rzp_test_dummy',
+  key_secret: config.razorpay.keySecret || 'dummy_secret',
 });
 
 /**
  * @route   POST /api/v1/payments/create-order
- * @desc    Create Razorpay order
+ * @desc    Create Razorpay order for subscription
  * @access  Private
  */
 router.post('/create-order', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { amount, currency = 'INR', planId, description } = req.body;
+    const { planId } = req.body;
 
-    if (!amount || amount <= 0) {
-      throw new AppError('Valid amount is required', 400, 'INVALID_AMOUNT');
+    if (!planId) {
+      throw new AppError('Plan ID is required', 400, 'PLAN_REQUIRED');
     }
+
+    // Get the subscription plan
+    const planRepository = AppDataSource.getRepository(SubscriptionPlan);
+    const plan = await planRepository.findOne({ where: { id: planId, isActive: true } });
+
+    if (!plan) {
+      throw new AppError('Plan not found', 404, 'PLAN_NOT_FOUND');
+    }
+
+    const amount = plan.price;
+    const currency = plan.currency || 'INR';
+
+    console.log(`[Payment] Creating order for plan: ${plan.displayName}, amount: ₹${amount}`);
 
     // Create Razorpay order
     const order = await razorpay.orders.create({
       amount: Math.round(amount * 100), // Amount in paise
       currency,
-      receipt: `receipt_${Date.now()}`,
+      receipt: `receipt_${Date.now()}_${req.user!.userId.substring(0, 8)}`,
       notes: {
         userId: req.user!.userId,
-        planId,
+        planId: plan.id,
+        planName: plan.displayName,
       },
     });
+
+    console.log(`[Payment] Razorpay order created: ${order.id}`);
 
     // Create payment record
     const paymentRepository = AppDataSource.getRepository(Payment);
@@ -48,11 +66,16 @@ router.post('/create-order', authenticate, async (req: AuthRequest, res: Respons
       amount,
       currency,
       status: PaymentStatus.PENDING,
-      description,
-      metadata: { planId },
+      description: `${plan.displayName} Subscription`,
+      metadata: { 
+        planId: plan.id, 
+        planName: plan.displayName,
+        durationMonths: plan.durationMonths,
+      },
     });
 
     await paymentRepository.save(payment);
+    console.log(`[Payment] Payment record created: ${payment.id}`);
 
     res.status(201).json({
       success: true,
@@ -62,21 +85,30 @@ router.post('/create-order', authenticate, async (req: AuthRequest, res: Respons
         currency: order.currency,
         paymentId: payment.id,
         keyId: config.razorpay.keyId,
+        plan: {
+          id: plan.id,
+          name: plan.displayName,
+          price: plan.price,
+          durationMonths: plan.durationMonths,
+        },
       },
     });
-  } catch (error) {
+  } catch (error: any) {
+    console.error('[Payment] Create order error:', error);
     next(error);
   }
 });
 
 /**
  * @route   POST /api/v1/payments/verify
- * @desc    Verify Razorpay payment
+ * @desc    Verify Razorpay payment and create subscription
  * @access  Private
  */
 router.post('/verify', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, planId } = req.body;
+
+    console.log(`[Payment] Verifying payment: ${razorpay_payment_id}`);
 
     // Verify signature
     const body = razorpay_order_id + '|' + razorpay_payment_id;
@@ -88,8 +120,11 @@ router.post('/verify', authenticate, async (req: AuthRequest, res: Response, nex
     const isAuthentic = expectedSignature === razorpay_signature;
 
     if (!isAuthentic) {
+      console.error('[Payment] Signature verification failed');
       throw new AppError('Payment verification failed', 400, 'INVALID_SIGNATURE');
     }
+
+    console.log('[Payment] Signature verified successfully');
 
     // Update payment record
     const paymentRepository = AppDataSource.getRepository(Payment);
@@ -106,12 +141,66 @@ router.post('/verify', authenticate, async (req: AuthRequest, res: Response, nex
     payment.status = PaymentStatus.SUCCESS;
     await paymentRepository.save(payment);
 
+    console.log(`[Payment] Payment status updated to SUCCESS: ${payment.id}`);
+
+    // Get plan from payment metadata or request
+    const actualPlanId = planId || payment.metadata?.planId;
+    
+    if (!actualPlanId) {
+      throw new AppError('Plan ID not found', 400, 'PLAN_NOT_FOUND');
+    }
+
+    // Get plan details
+    const planRepository = AppDataSource.getRepository(SubscriptionPlan);
+    const plan = await planRepository.findOne({ where: { id: actualPlanId } });
+
+    if (!plan) {
+      throw new AppError('Plan not found', 404, 'PLAN_NOT_FOUND');
+    }
+
+    // Cancel any existing active subscriptions
+    const subscriptionRepository = AppDataSource.getRepository(UserSubscription);
+    await subscriptionRepository.update(
+      { userId: req.user!.userId, status: SubscriptionStatus.ACTIVE },
+      { status: SubscriptionStatus.CANCELLED, cancelledAt: new Date() }
+    );
+
+    // Create new subscription
+    const startDate = new Date();
+    const expiresAt = new Date();
+    expiresAt.setMonth(expiresAt.getMonth() + plan.durationMonths);
+
+    const subscription = subscriptionRepository.create({
+      userId: req.user!.userId,
+      planId: plan.id,
+      status: SubscriptionStatus.ACTIVE,
+      startedAt: startDate,
+      expiresAt,
+      paymentId: payment.id,
+      finalAmount: payment.amount,
+      discountAmount: 0,
+      autoRenew: false,
+    });
+
+    await subscriptionRepository.save(subscription);
+    console.log(`[Payment] Subscription created: ${subscription.id}, expires: ${expiresAt}`);
+
+    // Load full subscription with plan
+    const fullSubscription = await subscriptionRepository.findOne({
+      where: { id: subscription.id },
+      relations: ['plan'],
+    });
+
     res.json({
       success: true,
-      message: 'Payment verified successfully',
-      data: payment,
+      message: 'Payment verified and subscription activated!',
+      data: {
+        payment,
+        subscription: fullSubscription,
+      },
     });
-  } catch (error) {
+  } catch (error: any) {
+    console.error('[Payment] Verify error:', error);
     next(error);
   }
 });
@@ -180,11 +269,14 @@ router.post('/webhook', async (req, res: Response, next: NextFunction) => {
       .digest('hex');
 
     if (webhookSignature !== expectedSignature) {
+      console.error('[Webhook] Invalid signature');
       return res.status(400).json({ success: false, message: 'Invalid webhook signature' });
     }
 
     const event = req.body;
     const paymentRepository = AppDataSource.getRepository(Payment);
+
+    console.log(`[Webhook] Received event: ${event.event}`);
 
     switch (event.event) {
       case 'payment.captured':
@@ -192,6 +284,7 @@ router.post('/webhook', async (req, res: Response, next: NextFunction) => {
           { gatewayPaymentId: event.payload.payment.entity.id },
           { status: PaymentStatus.SUCCESS }
         );
+        console.log('[Webhook] Payment captured:', event.payload.payment.entity.id);
         break;
 
       case 'payment.failed':
@@ -202,6 +295,7 @@ router.post('/webhook', async (req, res: Response, next: NextFunction) => {
             failureReason: event.payload.payment.entity.error_description,
           }
         );
+        console.log('[Webhook] Payment failed:', event.payload.payment.entity.order_id);
         break;
 
       case 'refund.created':
@@ -214,11 +308,13 @@ router.post('/webhook', async (req, res: Response, next: NextFunction) => {
             refundedAt: new Date(),
           }
         );
+        console.log('[Webhook] Refund created:', event.payload.refund.entity.id);
         break;
     }
 
     res.json({ success: true });
   } catch (error) {
+    console.error('[Webhook] Error:', error);
     next(error);
   }
 });

@@ -69,84 +69,78 @@ async function seed() {
     }
     logger.info(`✅ Seeded ${classCount} classes`);
 
-    // Seed Subscription Plans
+    // Seed Subscription Plans - Only Monthly (₹299) and Yearly (₹3000)
     const planRepository = AppDataSource.getRepository(SubscriptionPlan);
+    
+    // Delete existing plans first to update with new plans
+    await planRepository.createQueryBuilder().delete().from(SubscriptionPlan).execute();
+    logger.info('  Cleared existing subscription plans');
+    
     const plans = [
       {
-        planName: 'basic',
-        displayName: 'Basic Plan',
-        description: 'Perfect for getting started',
-        price: 499,
-        originalPrice: 699,
-        durationMonths: 1,
-        maxStudents: 1,
-        aiMinutesPerDay: 30,
-        features: ['1 Subject', '30 AI mins/day', 'Basic quizzes', 'Weekly reports', 'Email support'],
-        doubtTypes: ['text'],
-        supportType: 'email',
-        reportFrequency: 'weekly',
-        displayOrder: 1,
-      },
-      {
-        planName: 'standard',
-        displayName: 'Standard Plan',
-        description: 'Most popular choice',
-        price: 999,
-        originalPrice: 1499,
+        planName: 'monthly',
+        displayName: 'Monthly Plan',
+        description: 'Perfect for trying out our platform. Full access to all features.',
+        price: 299,
+        originalPrice: 399,
+        currency: 'INR',
         durationMonths: 1,
         maxStudents: 1,
         aiMinutesPerDay: 60,
-        features: ['3 Subjects', '60 AI mins/day', 'All quizzes', 'Daily reports', 'Chat support'],
-        doubtTypes: ['text', 'voice'],
-        supportType: 'chat',
-        reportFrequency: 'daily',
+        features: [
+          'Unlimited access to all subjects',
+          'AI-powered personalized learning',
+          'Instant doubt resolution',
+          'Progress tracking & analytics',
+          'Quizzes & assessments',
+          'Study plan generation',
+        ],
+        doubtTypes: ['text', 'voice', 'image'],
+        hasLiveSessions: false,
+        hasPersonalMentor: false,
+        supportType: 'email',
+        reportFrequency: 'weekly',
+        isActive: true,
+        isPopular: false,
+        displayOrder: 1,
+      },
+      {
+        planName: 'yearly',
+        displayName: 'Yearly Plan',
+        description: 'Best value! Save ₹588 with annual subscription. All features included.',
+        price: 3000,
+        originalPrice: 3588,
+        currency: 'INR',
+        durationMonths: 12,
+        maxStudents: 1,
+        aiMinutesPerDay: 120,
+        features: [
+          'Everything in Monthly Plan',
+          'Priority AI responses',
+          'Extended AI usage (120 min/day)',
+          'Detailed performance reports',
+          'Parent dashboard access',
+          'Offline content download',
+          'Certificate of completion',
+          'Save ₹588 compared to monthly',
+        ],
+        doubtTypes: ['text', 'voice', 'image'],
+        hasLiveSessions: true,
+        hasPersonalMentor: false,
+        supportType: 'priority',
+        reportFrequency: 'weekly',
+        isActive: true,
         isPopular: true,
         displayOrder: 2,
       },
-      {
-        planName: 'premium',
-        displayName: 'Premium Plan',
-        description: 'Complete learning experience',
-        price: 1499,
-        originalPrice: 2499,
-        durationMonths: 1,
-        maxStudents: 2,
-        aiMinutesPerDay: 120,
-        features: ['All Subjects', '120 AI mins/day', 'All quizzes + Mock tests', 'Real-time reports', 'Priority support'],
-        doubtTypes: ['text', 'voice', 'image'],
-        supportType: 'priority_chat',
-        reportFrequency: 'realtime',
-        displayOrder: 3,
-      },
-      {
-        planName: 'unlimited',
-        displayName: 'Unlimited Plan',
-        description: 'For serious learners',
-        price: 2499,
-        originalPrice: 3999,
-        durationMonths: 1,
-        maxStudents: 3,
-        aiMinutesPerDay: 9999,
-        features: ['All Subjects', 'Unlimited AI', 'All features', 'Live sessions', 'Personal mentor', '24/7 support'],
-        doubtTypes: ['text', 'voice', 'image'],
-        hasLiveSessions: true,
-        hasPersonalMentor: true,
-        supportType: '24x7',
-        reportFrequency: 'realtime',
-        displayOrder: 4,
-      },
     ];
 
-    let planCount = 0;
     for (const planData of plans) {
-      const existing = await planRepository.findOne({ where: { planName: planData.planName } });
-      if (!existing) {
-        const plan = planRepository.create(planData);
-        await planRepository.save(plan);
-        planCount++;
-      }
+      const plan = planRepository.create(planData);
+      await planRepository.save(plan);
+      logger.info(`  ✓ Created plan: ${plan.displayName} - ₹${plan.price}`);
     }
-    logger.info(`✅ Seeded ${planCount} subscription plans`);
+    logger.info(`✅ Seeded ${plans.length} subscription plans`);
 
     // Seed Achievements
     const achievementRepository = AppDataSource.getRepository(Achievement);

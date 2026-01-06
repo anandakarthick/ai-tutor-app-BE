@@ -14,6 +14,7 @@
     "migration:show": "npm run typeorm -- migration:show -d src/config/datasource.ts",
     "seed": "ts-node src/database/seeds/index.ts",
     "seed:academic": "ts-node src/database/seeds/academic-content.seed.ts",
+    "seed:subscriptions": "ts-node src/database/seeds/subscription-plans.seed.ts",
     "seed:all": "npm run seed && npm run seed:academic",
     "fix:students": "ts-node src/database/seeds/fix-missing-students.ts",
     "reset:users": "ts-node src/database/seeds/reset-users.ts",
