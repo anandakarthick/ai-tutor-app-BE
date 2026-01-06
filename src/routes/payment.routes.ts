@@ -49,11 +49,26 @@ router.post('/test-post', (req, res) => {
 });
 
 /**
+ * @route   POST /api/v1/payments/test-auth
+ * @desc    Test POST route with authentication
+ * @access  Private
+ */
+router.post('/test-auth', authenticate, (req: AuthRequest, res) => {
+  console.log('[Payment] Test Auth POST received:', req.body);
+  console.log('[Payment] User:', req.user);
+  res.json({ success: true, message: 'Auth POST works!', received: req.body, user: req.user });
+});
+
+/**
  * @route   POST /api/v1/payments/create-order
  * @desc    Create Razorpay order for subscription
  * @access  Private
  */
 router.post('/create-order', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  console.log('[Payment] ========== CREATE ORDER START ==========');
+  console.log('[Payment] Request body:', JSON.stringify(req.body, null, 2));
+  console.log('[Payment] User:', req.user);
+  
   try {
     const { planId } = req.body;
 

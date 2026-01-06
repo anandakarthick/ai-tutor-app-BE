@@ -15,18 +15,19 @@ const router = Router();
  */
 router.get('/plans', async (req, res: Response, next: NextFunction) => {
   try {
-    const cached = await cacheService.get<SubscriptionPlan[]>('subscription:plans');
-    if (cached) {
-      return res.json({ success: true, data: cached, cached: true });
-    }
-
+    // Clear cache first to ensure fresh data
+    await cacheService.del('subscription:plans');
+    
     const planRepository = AppDataSource.getRepository(SubscriptionPlan);
     const plans = await planRepository.find({
       where: { isActive: true },
       order: { displayOrder: 'ASC', price: 'ASC' },
     });
 
-    await cacheService.set('subscription:plans', plans, 3600); // 1 hour
+    console.log('[Subscription] Loaded plans from DB:', plans.map(p => ({ name: p.displayName, price: p.price })));
+
+    // Don't cache for now to debug
+    // await cacheService.set('subscription:plans', plans, 3600);
 
     res.json({ success: true, data: plans });
   } catch (error) {

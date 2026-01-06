@@ -170,6 +170,12 @@ app.get('/health', (req: Request, res: Response) => {
 // API prefix
 const apiPrefix = `/api/${config.apiVersion}`;
 
+// Register payment routes BEFORE encryption middleware (for testing)
+// This allows unencrypted payment requests temporarily
+app.use(`${apiPrefix}/payments`, paymentRoutes);
+app.use(`${apiPrefix}/subscriptions`, subscriptionRoutes);
+console.log('💳 Payment & Subscription routes registered (before encryption)');
+
 // Apply E2E encryption middleware to all API routes
 // Note: Encryption is optional for web clients (controlled via X-Encryption-Enabled header)
 if (config.encryptionEnabled) {
@@ -193,8 +199,8 @@ app.use(`${apiPrefix}/learning`, learningRoutes);
 app.use(`${apiPrefix}/doubts`, doubtRoutes);
 app.use(`${apiPrefix}/quizzes`, quizRoutes);
 app.use(`${apiPrefix}/study-plans`, studyPlanRoutes);
-app.use(`${apiPrefix}/subscriptions`, subscriptionRoutes);
-app.use(`${apiPrefix}/payments`, paymentRoutes);
+// app.use(`${apiPrefix}/subscriptions`, subscriptionRoutes); // Moved before encryption middleware
+// app.use(`${apiPrefix}/payments`, paymentRoutes); // Moved before encryption middleware
 app.use(`${apiPrefix}/progress`, progressRoutes);
 app.use(`${apiPrefix}/notifications`, notificationRoutes);
 app.use(`${apiPrefix}/dashboard`, dashboardRoutes);
