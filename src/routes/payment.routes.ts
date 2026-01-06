@@ -118,7 +118,7 @@ router.post('/verify', authenticate, async (req: AuthRequest, res: Response, nex
 
 /**
  * @route   GET /api/v1/payments
- * @desc    Get user's payments
+ * @desc    Get user's payments with subscription info
  * @access  Private
  */
 router.get('/', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -129,7 +129,13 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response, next: Next
       order: { createdAt: 'DESC' },
     });
 
-    res.json({ success: true, data: payments });
+    // Enhance payments with plan info from metadata
+    const enhancedPayments = payments.map(payment => ({
+      ...payment,
+      description: payment.description || (payment.metadata?.planName ? `${payment.metadata.planName} Subscription` : 'Subscription Payment'),
+    }));
+
+    res.json({ success: true, data: enhancedPayments });
   } catch (error) {
     next(error);
   }

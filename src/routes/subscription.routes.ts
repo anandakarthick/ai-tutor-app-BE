@@ -56,7 +56,7 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response, next: Next
 
 /**
  * @route   GET /api/v1/subscriptions/active
- * @desc    Get user's active subscription
+ * @desc    Get user's active subscription with detailed info
  * @access  Private
  */
 router.get('/active', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -69,6 +69,30 @@ router.get('/active', authenticate, async (req: AuthRequest, res: Response, next
       },
       relations: ['plan'],
     });
+
+    if (subscription) {
+      // Calculate days remaining
+      const now = new Date();
+      const expiresAt = new Date(subscription.expiresAt);
+      const daysRemaining = Math.ceil((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      
+      // Check if subscription has expired
+      if (daysRemaining < 0) {
+        // Update status to expired
+        subscription.status = SubscriptionStatus.EXPIRED;
+        await subscriptionRepository.save(subscription);
+        return res.json({ success: true, data: null });
+      }
+
+      // Add calculated fields
+      const enhancedSubscription = {
+        ...subscription,
+        daysRemaining,
+        isExpiringSoon: daysRemaining <= 7,
+      };
+
+      return res.json({ success: true, data: enhancedSubscription });
+    }
 
     res.json({ success: true, data: subscription });
   } catch (error) {
