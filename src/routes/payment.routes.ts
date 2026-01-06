@@ -11,10 +11,41 @@ import { AppError } from '../middlewares/errorHandler';
 
 const router = Router();
 
-// Initialize Razorpay
-const razorpay = new Razorpay({
-  key_id: config.razorpay.keyId || 'rzp_test_dummy',
-  key_secret: config.razorpay.keySecret || 'dummy_secret',
+// Initialize Razorpay lazily to prevent startup failures
+let razorpayInstance: Razorpay | null = null;
+
+const getRazorpay = (): Razorpay => {
+  if (!razorpayInstance) {
+    if (!config.razorpay.keyId || !config.razorpay.keySecret) {
+      console.warn('[Payment] Razorpay keys not configured');
+    }
+    razorpayInstance = new Razorpay({
+      key_id: config.razorpay.keyId || 'rzp_test_dummy',
+      key_secret: config.razorpay.keySecret || 'dummy_secret',
+    });
+  }
+  return razorpayInstance;
+};
+
+console.log('[Payment] Payment routes loaded');
+
+/**
+ * @route   GET /api/v1/payments/test
+ * @desc    Test route to verify payment routes are working
+ * @access  Public
+ */
+router.get('/test', (req, res) => {
+  res.json({ success: true, message: 'Payment routes working!' });
+});
+
+/**
+ * @route   POST /api/v1/payments/test-post
+ * @desc    Test POST route
+ * @access  Public
+ */
+router.post('/test-post', (req, res) => {
+  console.log('[Payment] Test POST received:', req.body);
+  res.json({ success: true, message: 'POST works!', received: req.body });
 });
 
 /**
@@ -26,6 +57,8 @@ router.post('/create-order', authenticate, async (req: AuthRequest, res: Respons
   try {
     const { planId } = req.body;
 
+    console.log('[Payment] Create order request received:', { planId });
+
     if (!planId) {
       throw new AppError('Plan ID is required', 400, 'PLAN_REQUIRED');
     }
@@ -35,7 +68,7 @@ router.post('/create-order', authenticate, async (req: AuthRequest, res: Respons
     const plan = await planRepository.findOne({ where: { id: planId, isActive: true } });
 
     if (!plan) {
-      throw new AppError('Plan not found', 404, 'PLAN_NOT_FOUND');
+      throw new AppError('Plan not founds', 404, 'PLAN_NOT_FOUND');
     }
 
     const amount = plan.price;
@@ -44,6 +77,7 @@ router.post('/create-order', authenticate, async (req: AuthRequest, res: Respons
     console.log(`[Payment] Creating order for plan: ${plan.displayName}, amount: ₹${amount}`);
 
     // Create Razorpay order
+    const razorpay = getRazorpay();
     const order = await razorpay.orders.create({
       amount: Math.round(amount * 100), // Amount in paise
       currency,
