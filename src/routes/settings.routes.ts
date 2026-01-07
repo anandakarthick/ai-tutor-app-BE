@@ -1,9 +1,62 @@
 import { Router, Response, NextFunction } from 'express';
 import AppDataSource from '../config/database';
 import { User } from '../entities/User';
+import { Setting } from '../entities/Setting';
 import { authenticate, AuthRequest } from '../middlewares/auth';
 
 const router = Router();
+
+// ==================== Public Settings ====================
+
+/**
+ * @route   GET /api/v1/settings/public
+ * @desc    Get public site settings (no auth required)
+ * @access  Public
+ */
+router.get('/public', async (req, res: Response, next: NextFunction) => {
+  try {
+    const settingRepository = AppDataSource.getRepository(Setting);
+    
+    // Fetch all general/public settings
+    const settings = await settingRepository.find({
+      where: [{ category: 'general' }, { category: 'contact' }, { category: 'social' }],
+    });
+
+    // Convert to key-value object
+    const result: Record<string, any> = {};
+    settings.forEach(setting => {
+      let value: any = setting.value;
+      if (setting.type === 'boolean') {
+        value = setting.value === 'true';
+      } else if (setting.type === 'number') {
+        value = parseInt(setting.value, 10);
+      } else if (setting.type === 'json') {
+        try { value = JSON.parse(setting.value); } catch (e) { value = setting.value; }
+      }
+      result[setting.key] = value;
+    });
+
+    // Return with mapped keys (handle both underscore and camelCase)
+    res.json({
+      success: true,
+      data: {
+        siteName: result.site_name || result.siteName || 'AI Tutor',
+        tagline: result.site_description || result.tagline || result.site_tagline || 'Your Personal AI-Powered Learning Companion',
+        supportEmail: result.support_email || result.supportEmail || 'support@aitutor.com',
+        supportPhone: result.support_phone || result.supportPhone || '+91 98765 43210',
+        whatsappNumber: result.whatsapp_number || result.whatsappNumber || '919876543210',
+        address: result.address || result.company_address || 'Chennai, Tamil Nadu, India',
+        facebookUrl: result.facebook_url || result.facebookUrl || 'https://facebook.com/aitutor',
+        twitterUrl: result.twitter_url || result.twitterUrl || 'https://twitter.com/aitutor',
+        instagramUrl: result.instagram_url || result.instagramUrl || 'https://instagram.com/aitutor',
+        linkedinUrl: result.linkedin_url || result.linkedinUrl || 'https://linkedin.com/company/aitutor',
+        youtubeUrl: result.youtube_url || result.youtubeUrl || 'https://youtube.com/@aitutor',
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 // ==================== Notification Preferences ====================
 
