@@ -16,7 +16,7 @@ export class LearningSession extends BaseEntity {
   @Column({ name: 'student_id' })
   studentId: string;
 
-  @ManyToOne(() => Topic)
+  @ManyToOne(() => Topic, (topic) => topic.sessions)
   @JoinColumn({ name: 'topic_id' })
   topic: Topic;
 

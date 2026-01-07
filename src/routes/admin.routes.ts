@@ -675,6 +675,41 @@ router.get('/classes', authenticateAdmin, async (req: AdminRequest, res: Respons
 });
 
 /**
+ * @route   GET /api/v1/admin/classes/:id
+ * @desc    Get class by ID
+ * @access  Private
+ */
+router.get('/classes/:id', authenticateAdmin, async (req: AdminRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+
+    const classRepository = AppDataSource.getRepository(Class);
+    const studentRepository = AppDataSource.getRepository(Student);
+    const subjectRepository = AppDataSource.getRepository(Subject);
+
+    const classEntity = await classRepository.findOne({
+      where: { id },
+      relations: ['board'],
+    });
+
+    if (!classEntity) {
+      return res.status(404).json({ success: false, message: 'Class not found' });
+    }
+
+    // Get counts
+    const studentCount = await studentRepository.count({ where: { classId: classEntity.id, isActive: true } });
+    const subjectCount = await subjectRepository.count({ where: { classId: classEntity.id, isActive: true } });
+
+    res.json({
+      success: true,
+      data: { ...classEntity, studentCount, subjectCount },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * @route   POST /api/v1/admin/classes
  * @desc    Create class
  * @access  Private
@@ -1023,6 +1058,36 @@ router.get('/plans', authenticateAdmin, async (req: AdminRequest, res: Response,
 });
 
 /**
+ * @route   GET /api/v1/admin/plans/:id
+ * @desc    Get plan by ID
+ * @access  Private
+ */
+router.get('/plans/:id', authenticateAdmin, async (req: AdminRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+
+    const planRepository = AppDataSource.getRepository(SubscriptionPlan);
+    const subscriptionRepository = AppDataSource.getRepository(UserSubscription);
+
+    const plan = await planRepository.findOne({ where: { id } });
+
+    if (!plan) {
+      return res.status(404).json({ success: false, message: 'Plan not found' });
+    }
+
+    // Get subscriber count
+    const subscriberCount = await subscriptionRepository.count({ where: { planId: plan.id } });
+
+    res.json({
+      success: true,
+      data: { ...plan, subscriberCount },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * @route   POST /api/v1/admin/plans
  * @desc    Create subscription plan
  * @access  Private
@@ -1179,9 +1244,9 @@ router.get('/transactions/:id', authenticateAdmin, async (req: AdminRequest, res
 /**
  * @route   GET /api/v1/admin/admins
  * @desc    Get all admin users
- * @access  Private (Super Admin only)
+ * @access  Private
  */
-router.get('/admins', authenticateAdmin, authorizeAdmin(AdminRole.SUPER_ADMIN), async (req: AdminRequest, res: Response, next: NextFunction) => {
+router.get('/admins', authenticateAdmin, async (req: AdminRequest, res: Response, next: NextFunction) => {
   try {
     const adminRepository = AppDataSource.getRepository(Admin);
     const admins = await adminRepository.find({
@@ -1189,6 +1254,28 @@ router.get('/admins', authenticateAdmin, authorizeAdmin(AdminRole.SUPER_ADMIN), 
     });
 
     res.json({ success: true, data: admins });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * @route   GET /api/v1/admin/admins/:id
+ * @desc    Get admin by ID
+ * @access  Private
+ */
+router.get('/admins/:id', authenticateAdmin, async (req: AdminRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+
+    const adminRepository = AppDataSource.getRepository(Admin);
+    const admin = await adminRepository.findOne({ where: { id } });
+
+    if (!admin) {
+      return res.status(404).json({ success: false, message: 'Admin not found' });
+    }
+
+    res.json({ success: true, data: admin });
   } catch (error) {
     next(error);
   }

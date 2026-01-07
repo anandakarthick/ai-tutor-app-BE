@@ -5,6 +5,7 @@ import { ContentBlock } from './ContentBlock';
 import { Quiz } from './Quiz';
 import { Doubt } from './Doubt';
 import { StudentProgress } from './StudentProgress';
+import { LearningSession } from './LearningSession';
 
 @Entity('topics')
 @Index(['chapterId', 'topicTitle'], { unique: true })
@@ -58,4 +59,7 @@ export class Topic extends BaseEntity {
 
   @OneToMany(() => StudentProgress, (progress) => progress.topic)
   studentProgress: StudentProgress[];
+
+  @OneToMany(() => LearningSession, (session) => session.topic)
+  sessions: LearningSession[];
 }
