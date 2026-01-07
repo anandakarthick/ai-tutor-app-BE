@@ -122,6 +122,87 @@ router.get('/auth/me', authenticateAdmin, async (req: AdminRequest, res: Respons
   }
 });
 
+/**
+ * @route   PUT /api/v1/admin/auth/profile
+ * @desc    Update current admin profile
+ * @access  Private
+ */
+router.put('/auth/profile', authenticateAdmin, async (req: AdminRequest, res: Response, next: NextFunction) => {
+  try {
+    const { fullName, phone, profileImageUrl } = req.body;
+    const adminId = req.admin!.adminId;
+
+    const adminRepository = AppDataSource.getRepository(Admin);
+    
+    await adminRepository.update(adminId, {
+      fullName,
+      phone,
+      profileImageUrl,
+    });
+
+    const updatedAdmin = await adminRepository.findOne({ where: { id: adminId } });
+
+    res.json({ 
+      success: true, 
+      message: 'Profile updated successfully',
+      data: {
+        id: updatedAdmin!.id,
+        email: updatedAdmin!.email,
+        fullName: updatedAdmin!.fullName,
+        phone: updatedAdmin!.phone,
+        role: updatedAdmin!.role,
+        profileImageUrl: updatedAdmin!.profileImageUrl,
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * @route   PUT /api/v1/admin/auth/change-password
+ * @desc    Change current admin password
+ * @access  Private
+ */
+router.put('/auth/change-password', authenticateAdmin, async (req: AdminRequest, res: Response, next: NextFunction) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const adminId = req.admin!.adminId;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, message: 'Current and new password are required' });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ success: false, message: 'New password must be at least 8 characters' });
+    }
+
+    const adminRepository = AppDataSource.getRepository(Admin);
+    const admin = await adminRepository.findOne({
+      where: { id: adminId },
+      select: ['id', 'password'],
+    });
+
+    if (!admin) {
+      return res.status(404).json({ success: false, message: 'Admin not found' });
+    }
+
+    // Verify current password
+    const isMatch = await bcrypt.compare(currentPassword, admin.password);
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: 'Current password is incorrect' });
+    }
+
+    // Hash and save new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await adminRepository.update(adminId, { password: hashedPassword });
+
+    res.json({ success: true, message: 'Password changed successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // ==================== DASHBOARD ROUTES ====================
 
 /**
@@ -1229,6 +1310,7 @@ router.get('/analytics/overview', authenticateAdmin, async (req: AdminRequest, r
     const studentRepository = AppDataSource.getRepository(Student);
     const paymentRepository = AppDataSource.getRepository(Payment);
     const subscriptionRepository = AppDataSource.getRepository(UserSubscription);
+    const sessionRepository = AppDataSource.getRepository(LearningSession);
 
     // Daily registrations
     const dailyRegistrations = await studentRepository
@@ -1263,9 +1345,11 @@ router.get('/analytics/overview', authenticateAdmin, async (req: AdminRequest, r
 
     // Total stats
     const totalUsers = await studentRepository.count({ where: { isActive: true } });
-    const totalQuestions = await AppDataSource.getRepository(LearningSession)
+    
+    // Use ai_interactions instead of questionsAsked
+    const totalInteractions = await sessionRepository
       .createQueryBuilder('session')
-      .select('SUM(session.questionsAsked)', 'total')
+      .select('SUM(session.ai_interactions)', 'total')
       .getRawOne();
 
     // Monthly revenue for chart
@@ -1290,7 +1374,7 @@ router.get('/analytics/overview', authenticateAdmin, async (req: AdminRequest, r
         monthlyRevenue,
         summary: {
           totalUsers,
-          totalQuestions: totalQuestions?.total || 0,
+          totalInteractions: totalInteractions?.total || 0,
         },
       },
     });
@@ -1307,18 +1391,23 @@ router.get('/analytics/overview', authenticateAdmin, async (req: AdminRequest, r
 router.get('/analytics/top-subjects', authenticateAdmin, async (req: AdminRequest, res: Response, next: NextFunction) => {
   try {
     const subjectRepository = AppDataSource.getRepository(Subject);
-    const sessionRepository = AppDataSource.getRepository(LearningSession);
+    const studentRepository = AppDataSource.getRepository(Student);
 
-    // Get session counts per subject
-    const subjectStats = await sessionRepository
-      .createQueryBuilder('session')
-      .leftJoin('session.subject', 'subject')
+    // Get student counts per subject interest (from student_interests table or inferred)
+    // Since LearningSession links to Topic, we join through Topic -> Chapter -> Book -> Subject
+    const subjectStats = await subjectRepository
+      .createQueryBuilder('subject')
+      .leftJoin('subject.books', 'book')
+      .leftJoin('book.chapters', 'chapter')
+      .leftJoin('chapter.topics', 'topic')
+      .leftJoin('topic.sessions', 'session')
       .select('subject.subjectName', 'subjectName')
       .addSelect('subject.colorCode', 'color')
-      .addSelect('COUNT(*)', 'sessions')
-      .addSelect('SUM(session.questionsAsked)', 'questions')
+      .addSelect('COUNT(DISTINCT session.id)', 'sessions')
+      .addSelect('SUM(session.ai_interactions)', 'interactions')
+      .where('subject.isActive = true')
       .groupBy('subject.id, subject.subjectName, subject.colorCode')
-      .orderBy('COUNT(*)', 'DESC')
+      .orderBy('COUNT(DISTINCT session.id)', 'DESC')
       .limit(5)
       .getRawMany();
 
