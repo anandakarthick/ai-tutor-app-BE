@@ -33,3 +33,5 @@ export { Achievement } from './Achievement';
 export { StudentAchievement } from './StudentAchievement';
 export { Notification } from './Notification';
 export { ParentReport } from './ParentReport';
+export { Admin, AdminRole } from './Admin';
+export { School } from './School';

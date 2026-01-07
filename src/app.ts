@@ -32,6 +32,7 @@ import progressRoutes from './routes/progress.routes';
 import notificationRoutes from './routes/notification.routes';
 import dashboardRoutes from './routes/dashboard.routes';
 import settingsRoutes from './routes/settings.routes';
+import adminRoutes from './routes/admin.routes';
 
 const app: Application = express();
 
@@ -205,6 +206,8 @@ app.use(`${apiPrefix}/progress`, progressRoutes);
 app.use(`${apiPrefix}/notifications`, notificationRoutes);
 app.use(`${apiPrefix}/dashboard`, dashboardRoutes);
 app.use(`${apiPrefix}/settings`, settingsRoutes);
+app.use(`${apiPrefix}/admin`, adminRoutes);
+console.log('🔐 Admin routes registered');
 
 // Serve web app for any non-API routes (SPA fallback)
 if (config.web.enabled) {
