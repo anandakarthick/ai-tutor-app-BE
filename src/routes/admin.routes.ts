@@ -1489,18 +1489,79 @@ router.get('/analytics/recent-activity', authenticateAdmin, async (req: AdminReq
 
 /**
  * @route   GET /api/v1/admin/boards
- * @desc    Get all boards
+ * @desc    Get all boards with filters
  * @access  Private
  */
 router.get('/boards', authenticateAdmin, async (req: AdminRequest, res: Response, next: NextFunction) => {
   try {
+    const { status, search } = req.query;
+    
     const boardRepository = AppDataSource.getRepository(Board);
-    const boards = await boardRepository.find({
-      where: { isActive: true },
-      order: { displayOrder: 'ASC' },
-    });
+    const classRepository = AppDataSource.getRepository(Class);
+    const studentRepository = AppDataSource.getRepository(Student);
+    
+    const queryBuilder = boardRepository.createQueryBuilder('board');
 
-    res.json({ success: true, data: boards });
+    // Apply filters
+    if (status === 'active') {
+      queryBuilder.andWhere('board.isActive = true');
+    } else if (status === 'inactive') {
+      queryBuilder.andWhere('board.isActive = false');
+    }
+
+    if (search) {
+      queryBuilder.andWhere(
+        '(board.name ILIKE :search OR board.fullName ILIKE :search OR board.state ILIKE :search)',
+        { search: `%${search}%` }
+      );
+    }
+
+    queryBuilder.orderBy('board.displayOrder', 'ASC');
+
+    const boards = await queryBuilder.getMany();
+
+    // Get class and student counts for each board
+    const boardsWithCounts = await Promise.all(
+      boards.map(async (board) => {
+        const classCount = await classRepository.count({ where: { boardId: board.id, isActive: true } });
+        const studentCount = await studentRepository.count({ where: { boardId: board.id, isActive: true } });
+        return { ...board, classCount, studentCount };
+      })
+    );
+
+    res.json({ success: true, data: boardsWithCounts });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * @route   GET /api/v1/admin/boards/:id
+ * @desc    Get board by ID
+ * @access  Private
+ */
+router.get('/boards/:id', authenticateAdmin, async (req: AdminRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+
+    const boardRepository = AppDataSource.getRepository(Board);
+    const classRepository = AppDataSource.getRepository(Class);
+    const studentRepository = AppDataSource.getRepository(Student);
+
+    const board = await boardRepository.findOne({ where: { id } });
+
+    if (!board) {
+      return res.status(404).json({ success: false, message: 'Board not found' });
+    }
+
+    // Get counts
+    const classCount = await classRepository.count({ where: { boardId: board.id, isActive: true } });
+    const studentCount = await studentRepository.count({ where: { boardId: board.id, isActive: true } });
+
+    res.json({ 
+      success: true, 
+      data: { ...board, classCount, studentCount } 
+    });
   } catch (error) {
     next(error);
   }
@@ -1513,8 +1574,29 @@ router.get('/boards', authenticateAdmin, async (req: AdminRequest, res: Response
  */
 router.post('/boards', authenticateAdmin, authorizeAdmin(AdminRole.SUPER_ADMIN, AdminRole.ADMIN), async (req: AdminRequest, res: Response, next: NextFunction) => {
   try {
+    const { name, fullName, state, description, logoUrl, displayOrder } = req.body;
+
+    if (!name || !fullName) {
+      return res.status(400).json({ success: false, message: 'Name and full name are required' });
+    }
+
     const boardRepository = AppDataSource.getRepository(Board);
-    const board = boardRepository.create(req.body);
+
+    // Check if board name already exists
+    const existingBoard = await boardRepository.findOne({ where: { name } });
+    if (existingBoard) {
+      return res.status(400).json({ success: false, message: 'Board with this name already exists' });
+    }
+
+    const board = boardRepository.create({
+      name,
+      fullName,
+      state,
+      description,
+      logoUrl,
+      displayOrder: displayOrder || 0,
+      isActive: true,
+    });
     await boardRepository.save(board);
 
     res.status(201).json({ success: true, data: board });
@@ -1531,9 +1613,33 @@ router.post('/boards', authenticateAdmin, authorizeAdmin(AdminRole.SUPER_ADMIN, 
 router.put('/boards/:id', authenticateAdmin, authorizeAdmin(AdminRole.SUPER_ADMIN, AdminRole.ADMIN), async (req: AdminRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
+    const { name, fullName, state, description, logoUrl, displayOrder, isActive } = req.body;
 
     const boardRepository = AppDataSource.getRepository(Board);
-    await boardRepository.update(id, req.body);
+    
+    const board = await boardRepository.findOne({ where: { id } });
+    if (!board) {
+      return res.status(404).json({ success: false, message: 'Board not found' });
+    }
+
+    // Check if new name already exists (if name is being changed)
+    if (name && name !== board.name) {
+      const existingBoard = await boardRepository.findOne({ where: { name } });
+      if (existingBoard) {
+        return res.status(400).json({ success: false, message: 'Board with this name already exists' });
+      }
+    }
+
+    await boardRepository.update(id, {
+      name: name ?? board.name,
+      fullName: fullName ?? board.fullName,
+      state: state !== undefined ? state : board.state,
+      description: description !== undefined ? description : board.description,
+      logoUrl: logoUrl !== undefined ? logoUrl : board.logoUrl,
+      displayOrder: displayOrder ?? board.displayOrder,
+      isActive: isActive !== undefined ? isActive : board.isActive,
+    });
+    
     const updatedBoard = await boardRepository.findOne({ where: { id } });
 
     res.json({ success: true, data: updatedBoard });
@@ -1544,7 +1650,7 @@ router.put('/boards/:id', authenticateAdmin, authorizeAdmin(AdminRole.SUPER_ADMI
 
 /**
  * @route   DELETE /api/v1/admin/boards/:id
- * @desc    Delete board
+ * @desc    Delete board (soft delete)
  * @access  Private
  */
 router.delete('/boards/:id', authenticateAdmin, authorizeAdmin(AdminRole.SUPER_ADMIN), async (req: AdminRequest, res: Response, next: NextFunction) => {
@@ -1552,6 +1658,22 @@ router.delete('/boards/:id', authenticateAdmin, authorizeAdmin(AdminRole.SUPER_A
     const { id } = req.params;
 
     const boardRepository = AppDataSource.getRepository(Board);
+    const classRepository = AppDataSource.getRepository(Class);
+
+    const board = await boardRepository.findOne({ where: { id } });
+    if (!board) {
+      return res.status(404).json({ success: false, message: 'Board not found' });
+    }
+
+    // Check if board has associated classes
+    const classCount = await classRepository.count({ where: { boardId: id, isActive: true } });
+    if (classCount > 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Cannot delete board with ${classCount} active classes. Please reassign or delete the classes first.` 
+      });
+    }
+
     await boardRepository.update(id, { isActive: false });
 
     res.json({ success: true, message: 'Board deleted successfully' });
