@@ -17,9 +17,9 @@ router.get('/public', async (req, res: Response, next: NextFunction) => {
   try {
     const settingRepository = AppDataSource.getRepository(Setting);
     
-    // Fetch all general/public settings
+    // Fetch all general/public settings including app settings
     const settings = await settingRepository.find({
-      where: [{ category: 'general' }, { category: 'contact' }, { category: 'social' }],
+      where: [{ category: 'general' }, { category: 'contact' }, { category: 'social' }, { category: 'app' }],
     });
 
     // Convert to key-value object
@@ -40,17 +40,29 @@ router.get('/public', async (req, res: Response, next: NextFunction) => {
     res.json({
       success: true,
       data: {
-        siteName: result.site_name || result.siteName || 'AI Tutor',
+        // Site info
+        siteName: result.site_name || result.siteName || 'Viha AI',
         tagline: result.site_description || result.tagline || result.site_tagline || 'Your Personal AI-Powered Learning Companion',
-        supportEmail: result.support_email || result.supportEmail || 'support@aitutor.com',
+        supportEmail: result.support_email || result.supportEmail || 'support@example.com',
         supportPhone: result.support_phone || result.supportPhone || '+91 98765 43210',
         whatsappNumber: result.whatsapp_number || result.whatsappNumber || '919876543210',
         address: result.address || result.company_address || 'Chennai, Tamil Nadu, India',
-        facebookUrl: result.facebook_url || result.facebookUrl || 'https://facebook.com/aitutor',
-        twitterUrl: result.twitter_url || result.twitterUrl || 'https://twitter.com/aitutor',
-        instagramUrl: result.instagram_url || result.instagramUrl || 'https://instagram.com/aitutor',
-        linkedinUrl: result.linkedin_url || result.linkedinUrl || 'https://linkedin.com/company/aitutor',
-        youtubeUrl: result.youtube_url || result.youtubeUrl || 'https://youtube.com/@aitutor',
+        // Social URLs
+        facebookUrl: result.facebook_url || result.facebookUrl || '',
+        twitterUrl: result.twitter_url || result.twitterUrl || '',
+        instagramUrl: result.instagram_url || result.instagramUrl || '',
+        linkedinUrl: result.linkedin_url || result.linkedinUrl || '',
+        youtubeUrl: result.youtube_url || result.youtubeUrl || '',
+        // Maintenance mode
+        maintenanceMode: result.maintenance_mode === true || result.maintenance_mode === 'true',
+        maintenanceMessage: result.maintenance_message || 'We are currently under maintenance. Please check back soon.',
+        // App version settings
+        appCurrentVersion: result.app_current_version || '1.0.0',
+        appMinVersion: result.app_min_version || '1.0.0',
+        appForceUpdate: result.app_force_update === true || result.app_force_update === 'true',
+        appUpdateMessage: result.app_update_message || 'A new version is available. Please update to continue.',
+        playStoreUrl: result.play_store_url || '',
+        appStoreUrl: result.app_store_url || '',
       },
     });
   } catch (error) {
@@ -221,21 +233,42 @@ router.get('/contact', async (req, res: Response, next: NextFunction) => {
 
 /**
  * @route   GET /api/v1/settings/app-info
- * @desc    Get app information
+ * @desc    Get app information (dynamic from database)
  * @access  Public
  */
 router.get('/app-info', async (req, res: Response, next: NextFunction) => {
   try {
+    const settingRepository = AppDataSource.getRepository(Setting);
+    
+    // Fetch app settings from database
+    const settings = await settingRepository.find({
+      where: [{ category: 'app' }, { category: 'general' }],
+    });
+
+    // Convert to key-value object
+    const result: Record<string, any> = {};
+    settings.forEach(setting => {
+      let value: any = setting.value;
+      if (setting.type === 'boolean') {
+        value = setting.value === 'true';
+      } else if (setting.type === 'number') {
+        value = parseInt(setting.value, 10);
+      }
+      result[setting.key] = value;
+    });
+
     const appInfo = {
-      version: '1.0.0',
-      buildNumber: '100',
-      minVersion: '1.0.0',
-      forceUpdate: false,
-      updateMessage: 'A new version is available with exciting features!',
-      playStoreUrl: 'https://play.google.com/store/apps/details?id=com.aitutorapp',
-      appStoreUrl: 'https://apps.apple.com/app/ai-tutor/id123456789',
-      privacyPolicyUrl: 'https://aitutorapp.com/privacy',
-      termsUrl: 'https://aitutorapp.com/terms',
+      version: result.app_current_version || '1.0.0',
+      buildNumber: result.app_build_number || '100',
+      minVersion: result.app_min_version || '1.0.0',
+      forceUpdate: result.app_force_update === true || result.app_force_update === 'true',
+      updateMessage: result.app_update_message || 'A new version is available with exciting features!',
+      playStoreUrl: result.play_store_url || '',
+      appStoreUrl: result.app_store_url || '',
+      privacyPolicyUrl: result.privacy_policy_url || '/privacy-policy',
+      termsUrl: result.terms_url || '/terms-of-service',
+      maintenanceMode: result.maintenance_mode === true || result.maintenance_mode === 'true',
+      maintenanceMessage: result.maintenance_message || 'We are currently under maintenance. Please check back soon.',
     };
 
     res.json({ success: true, data: appInfo });
